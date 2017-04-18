@@ -1,2 +1,2 @@
 # bioneuron_oracle
-wub-a-lub-a-dub-dub
+"We're gonna drop it down there, just... get a whole fresh start, Morty. Create a whole fresh start."
