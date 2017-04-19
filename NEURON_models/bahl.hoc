@@ -1,4 +1,4 @@
-nrn_load_dll("/home/pduggins/bioneuron_oracle/NEURON_models/channels/x86_64/.libs/libnrnmech.so")
+nrn_load_dll("./channels/x86_64/.libs/libnrnmech.so")
 
 begintemplate Bahl
     // Reduced compartmental neuron model of layer 5 pyramidal neuron.
