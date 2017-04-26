@@ -1,4 +1,5 @@
 import nengo
+import bioneuron_oracle
 from nengo import Connection as NengoConnection
 from BioConnection import BioConnection
 
