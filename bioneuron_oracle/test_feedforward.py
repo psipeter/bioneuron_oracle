@@ -96,3 +96,22 @@ def feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo,
     
     # todo: call NEURON garbage collection
     return decoders_bio
+
+pre_neurons=100
+bio_neurons=50
+tau_nengo=0.01
+tau_neuron=0.01
+dt_nengo=0.001
+dt_neuron=0.0001
+pre_seed=3
+bio_seed=6
+t_final=1.0
+dim=2
+n_syn=5
+signal='prime_sinusoids'
+decoders_bio=None
+plots={'spikes','voltage','decode'}
+
+d_1 = feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
+                dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
+                decoders_bio, plots)
