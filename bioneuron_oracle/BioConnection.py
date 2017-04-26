@@ -4,18 +4,22 @@
 from nengo import Connection as NengoConnection
 from nengo.solvers import LstsqL2
 
+
 class BioConnection(NengoConnection):
+
     """
     Extends nengo.Connection to take additional parameters
     and support oracle decoder updating
     """
-    def __init__(self, pre, post, solver=LstsqL2(), 
+    def __init__(self, pre, post, solver=LstsqL2(),
                  syn_sec={'apical'},  n_syn=1,
                  weights_bias_conn=True, bio_decoders=None, **kwargs):
         """
-        syn_sec: the section(s) of the NEURON model on which to distribute synapses
+        syn_sec: the section(s) of the NEURON model on which
+                    to distribute synapses
         n_syn: number of synapses on the bioneuron per presynaptic neuron
-        weight_bias_conn: (bool) use this connection to emulate bioneuron biases
+        weight_bias_conn: (bool) use this connection
+                            to emulate bioneuron biases
         """
 #         self.pre = pre
 #         self.post = post
@@ -24,4 +28,8 @@ class BioConnection(NengoConnection):
         self.n_syn = n_syn
         self.weights_bias_conn = weights_bias_conn
         self.bio_decoders = bio_decoders
-        super(BioConnection, self).__init__(pre, post, solver=solver, **kwargs)  # todo: recursion depth error
+        self.syn_loc = None
+        self.syn_weights = None
+        self.weights_bias = None
+        # todo: recursion depth error
+        super(BioConnection, self).__init__(pre, post, solver=solver, **kwargs)

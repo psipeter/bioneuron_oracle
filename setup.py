@@ -39,17 +39,17 @@ def readme():
         return f.read()
 
 if __name__ == "__main__":
-	install_requires = check_dependencies()
-	setup(
-		name=name,
-		version='1.0',
-		description='incorporate NEURON models into nengo',
-		url='https://github.com/psipeter/bioneuron_oracle',
-		author='Peter Duggins',
-		author_email='psipeter@gmail.com',
-		packages=['bioneuron_oracle'],
-		long_description=readme(),
-		install_requires=install_requires,
-		include_package_data=True,
-		zip_safe=False
-	)
+    install_requires = check_dependencies()
+    setup(
+        name=name,
+        version='1.0',
+        description='incorporate NEURON models into nengo',
+        url='https://github.com/psipeter/bioneuron_oracle',
+        author='Peter Duggins',
+        author_email='psipeter@gmail.com',
+        packages=['bioneuron_oracle'],
+        long_description=readme(),
+        install_requires=install_requires,
+        include_package_data=True,
+        zip_safe=False
+    )

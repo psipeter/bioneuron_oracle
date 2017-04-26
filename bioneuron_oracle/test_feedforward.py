@@ -1,12 +1,12 @@
 import nengo
 import numpy as np
 import neuron
-from BahlNeuron import BahlNeuron, Bahl, ExpSyn
-from custom_signals import prime_sinusoids, step_input
+from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
+from bioneuron_oracle.custom_signals import prime_sinusoids, step_input
 from nengo.utils.matplotlib import rasterplot
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pandas as pd
+
 
 def feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
                 dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
@@ -109,9 +109,33 @@ t_final=1.0
 dim=2
 n_syn=5
 signal='prime_sinusoids'
+
+"""Unit test"""
 decoders_bio=None
 plots={'spikes','voltage','decode'}
-
 d_1 = feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
                 dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
                 decoders_bio, plots)
+
+"""Use random decoders instead of those computed by the oracle"""
+decoders_bio=np.random.RandomState(seed=123).uniform(
+    np.min(d_1),np.max(d_1),size=d_1.shape)
+plots={'decode'}
+d_2 = feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
+                dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
+                decoders_bio, plots)
+
+"""Change the LIF input (seed) but decode with original decoders"""
+decoders_bio=d_1
+plots={'decode'}
+d_3 = feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
+                dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
+                d_1, plots)
+
+"""New LIF (seed), new signal, old decoders"""
+decoders_bio=d_1
+signal='step_input'
+plots={'decode'}
+d_4 = feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
+                dt_neuron, pre_seed, bio_seed, t_final, dim, signal, 
+                d_1, plots)
