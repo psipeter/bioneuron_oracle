@@ -6,7 +6,7 @@ from bioneuron_oracle.custom_signals import prime_sinusoids, step_input
 from nengo.utils.matplotlib import rasterplot
 # import matplotlib.pyplot as plt
 import seaborn as sns
-import os
+import pytest
 
 
 def feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo, 
@@ -57,30 +57,35 @@ def feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo,
     sns.set(context='poster')
     if 'spikes' in plots:
         '''spike raster for PRE, BIO and comparison LIF ensembles'''
-        figure, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True)
-        rasterplot(sim.trange(),sim.data[probe_pre_spikes],ax=ax1,
-                    use_eventplot=True)
-        ax1.set(ylabel='pre',yticks=([]))
-        rasterplot(sim.trange(),sim.data[probe_bio_spikes],ax=ax2,
-                    use_eventplot=True)
-        ax2.set(ylabel='bioneuron',yticks=([]))
-        rasterplot(sim.trange(),sim.data[probe_lif_spikes],ax=ax3,
-                    use_eventplot=True)
-        ax3.set(xlabel='time (s)',ylabel='lif') #,yticks=([])
-        figure.savefig(plt_name+'_feedforward_spikes.png')
+        plt.subplots(3, 1, 1)
+        rasterplot(sim.trange(),sim.data[probe_pre_spikes], use_eventplot=True)
+        plt.xlabel('time (s)')
+        plt.ylabel('neuron')
+        plt.title('pre neurons')
+        plt.subplots(3, 1, 2)
+        rasterplot(sim.trange(),sim.data[probe_bio_spikes], use_eventplot=True)
+        plt.xlabel('time (s)')
+        plt.ylabel('neuron')
+        plt.title('bioneuron')
+        plt.subplots(3, 1, 3)
+        rasterplot(sim.trange(),sim.data[probe_lif_spikes], use_eventplot=True)
+        plt.xlabel('time (s)')
+        plt.ylabel('neuron')
+        plt.ylabel('lif neuron')
 
     if 'voltage' in plots:
         '''voltage trace for a specific bioneuron'''
-        figure2, ax3 = plt.subplots(1, 1, sharex=True)
+        plt.subplots(1, 1, 1)
         bio_idx = 0
         neuron = bio.neuron_type.neurons[bio_idx]
-        ax3.plot(np.array(neuron.t_record),np.array(neuron.v_record))
-        ax3.set(xlabel='time (ms)', ylabel='Voltage (mV)')
-        figure2.savefig(plt_name+'_feedforward_voltage.png')
+        plt.plot(np.array(neuron.t_record),np.array(neuron.v_record))
+        plt.xlabel('time (ms)')
+        plt.ylabel('voltage (mV)')
+        plt.title('bioneuron voltage')
 
     if 'decode' in plots:
         '''decoded output of bioensemble'''
-        figure3, ax4 = plt.subplots(1,1,sharex=True)
+        plt.subplots(1,1,1)
         lpf = nengo.Lowpass(tau_nengo)
         solver = nengo.solvers.LstsqL2(reg=0.01)
         act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
@@ -91,13 +96,14 @@ def feedforward(pre_neurons, bio_neurons, tau_nengo, tau_neuron, dt_nengo,
             sim.data[probe_direct]-xhat_bio)**2))
         rmse_lif=np.sqrt(np.average((
             sim.data[probe_direct]-sim.data[probe_lif])**2))
-        ax4.plot(sim.trange(),xhat_bio,label='bio, rmse=%.5f'%rmse_bio)
-        ax4.plot(sim.trange(),sim.data[probe_lif],
+        plt.plot(sim.trange(),xhat_bio,label='bio, rmse=%.5f'%rmse_bio)
+        plt.plot(sim.trange(),sim.data[probe_lif],
             label='lif, rmse=%.5f'%rmse_lif)
-        ax4.plot(sim.trange(),sim.data[probe_direct],label='direct')
-        ax4.set(ylabel='$\hat{x}(t)$')#,ylim=((ymin,ymax)))
-        legend3=ax4.legend() #prop={'size':8}
-        figure3.savefig(plt_name+'_feedforward_decode.png')
+        plt.plot(sim.trange(),sim.data[probe_direct],label='direct')
+        plt.xlabel('time (s)')
+        plt.ylabel('$\hat{x}(t)$')
+        plt.title('decode')
+        legend3=plt.legend() #prop={'size':8}
     
     # todo: call NEURON garbage collection
     return decoders_bio, rmse_bio, rmse_lif
