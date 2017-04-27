@@ -7,6 +7,7 @@ from nengo.builder.connection import build_decoders
 from nengo.builder.connection import BuiltConnection
 from nengo.builder.ensemble import get_activities
 from BahlNeuron import BahlNeuron, Bahl, ExpSyn
+from nengo.exceptions import NengoException, BuildError
 
 
 class SimBahlNeuron(Operator):
@@ -130,12 +131,17 @@ def build_connection(model, conn):
 
     if conn_into_bioneuron:
         # conn.pre must output spikes to connect to bioneurons
-        assert (hasattr(conn.pre, 'neuron_type')),\
-            "input %s to bioensemble %s must transmit spikes"\
-            % (conn.pre, conn.post)
-        assert ('spikes' in conn.pre.neuron_type.probeable),\
-            "input %s to bioensemble %s must transmit spikes"\
-            % (conn.pre, conn.post)
+        if not hasattr(conn.pre, 'neuron_type'):
+            raise BuildError("%s must transmit spikes to bioneurons in %s"\
+                             % (conn.pre, conn.post))
+            # raise BioConnectionError(conn.pre, conn.post)
+                # 
+        if not 'spikes' in conn.pre.neuron_type.probeable:
+            raise BuildError("%s must transmit spikes to bioneurons in %s"\
+                 % (conn.pre, conn.post))
+            # raise BioConnectionError(conn.pre, conn.post)
+                   # "input %s to bioensemble %s must transmit spikes"\
+                   # % (conn.pre, conn.post))
         # Todo: other error handling
         rng = np.random.RandomState(model.seeds[conn])
         model.sig[conn]['in'] = model.sig[conn.pre]['out']
@@ -269,3 +275,13 @@ def get_synaptic_locations(rng, pre_neurons, n_neurons,
     # unique locations per connection and per bioneuron (uses conn's rng)
     syn_locations=rng.uniform(0,1,size=(n_neurons,pre_neurons,n_syn))
     return syn_locations
+
+
+class BioConnectionError(BuildError):
+    """
+    An error occured while building connections into
+    or out of a bioensemble
+    """
+    # def __init__(self, pre, post):
+    #     self.pre = pre
+    #     self.post = post

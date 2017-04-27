@@ -14,9 +14,9 @@ dt_nengo=0.001
 dt_neuron=0.0001
 pre_seed=3
 bio_seed=6
-t_final=0.5
+t_final=1.0
 dim=2
-n_syn=5
+n_syn=10
 signal='prime_sinusoids'
 decoders_bio=None
 
