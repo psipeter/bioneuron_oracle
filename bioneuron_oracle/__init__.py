@@ -11,5 +11,6 @@ from .monkeypatch import patch_connections, unpatch_connections
 from BahlNeuron import *
 from builder import *
 from custom_signals import *
+import pytest
 
 patch_connections()
