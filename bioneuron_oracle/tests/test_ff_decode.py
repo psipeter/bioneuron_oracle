@@ -6,67 +6,73 @@ from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
 from bioneuron_oracle.custom_signals import prime_sinusoids, step_input
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
+from functools32 import lru_cache
 
-pre_neurons=100
-bio_neurons=20
-tau_nengo=0.01
-tau_neuron=0.01
-dt_nengo=0.001
-dt_neuron=0.0001
-pre_seed=3
-bio_seed=6
-t_final=1.0
-dim=2
-n_syn=10
-signal='prime_sinusoids'
-decoders_bio=None
 
-with nengo.Network() as model:
-    """
-    Simulate a feedforward network [stim]-[LIF]-[BIO]
-    and compare to [stim]-[LIF]-[LIF].
-    """
+@lru_cache(maxsize=None)
+def sim_ff():
+    pre_neurons=100
+    bio_neurons=20
+    tau_nengo=0.01
+    tau_neuron=0.01
+    dt_nengo=0.001
+    dt_neuron=0.0001
+    pre_seed=3
+    bio_seed=6
+    t_final=1.0
+    dim=2
+    n_syn=10
+    signal='prime_sinusoids'
+    decoders_bio=None
 
-    if signal == 'prime_sinusoids':
-        stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
-    elif signal == 'step_input':
-        stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
+    with nengo.Network() as model:
+        """
+        Simulate a feedforward network [stim]-[LIF]-[BIO]
+        and compare to [stim]-[LIF]-[LIF].
+        """
 
-    pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                        seed=pre_seed, neuron_type=nengo.LIF())
-    bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
-                        seed=bio_seed, neuron_type=BahlNeuron())
-    # lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
-    #                     neuron_type=nengo.LIF(), seed=bio_seed)
-    direct = nengo.Ensemble(n_neurons=1, dimensions=dim, 
-                            neuron_type=nengo.Direct(),)
+        if signal == 'prime_sinusoids':
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+        elif signal == 'step_input':
+            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
 
-    nengo.Connection(stim, pre, synapse=None)
-    nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
-    # nengo.Connection(pre,lif,synapse=tau_nengo)
-    nengo.Connection(stim, direct, synapse=tau_nengo)
+        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                            seed=pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
+                            seed=bio_seed, neuron_type=BahlNeuron())
+        # lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
+        #                     neuron_type=nengo.LIF(), seed=bio_seed)
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim, 
+                                neuron_type=nengo.Direct(),)
 
-    probe_stim = nengo.Probe(stim, synapse=None)
-    # probe_pre = nengo.Probe(pre,synapse=tau_nengo)
-    # probe_lif = nengo.Probe(lif,synapse=tau_nengo)
-    probe_direct = nengo.Probe(direct, synapse=tau_nengo)
-    # probe_pre_spikes = nengo.Probe(pre.neurons,'spikes')
-    probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
-    # probe_lif_spikes = nengo.Probe(lif.neurons,'spikes')
-    
-with nengo.Simulator(model,dt=dt_nengo) as sim:
-    sim.run(t_final)
+        nengo.Connection(stim, pre, synapse=None)
+        nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
+        # nengo.Connection(pre,lif,synapse=tau_nengo)
+        nengo.Connection(stim, direct, synapse=tau_nengo)
 
-# todo: call NEURON garbage collection
+        probe_stim = nengo.Probe(stim, synapse=None)
+        # probe_pre = nengo.Probe(pre,synapse=tau_nengo)
+        # probe_lif = nengo.Probe(lif,synapse=tau_nengo)
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        # probe_pre_spikes = nengo.Probe(pre.neurons,'spikes')
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+        # probe_lif_spikes = nengo.Probe(lif.neurons,'spikes')
+        
+    with nengo.Simulator(model,dt=dt_nengo) as sim:
+        sim.run(t_final)
 
-# Generate decoders and a basic decoding for comparison
-lpf = nengo.Lowpass(tau_nengo)
-solver = nengo.solvers.LstsqL2(reg=0.01)
-act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-decoders_bio_old, info = solver(act_bio, sim.data[probe_direct])
-xhat_bio_old=np.dot(act_bio,decoders_bio_old)
-rmse_bio_old=rmse(sim.data[probe_direct],xhat_bio_old)
-# rmse_lif=rmse(sim.data[probe_direct],sim.data[probe_lif])
+    # todo: call NEURON garbage collection
+
+    # Generate decoders and a basic decoding for comparison
+    lpf = nengo.Lowpass(tau_nengo)
+    solver = nengo.solvers.LstsqL2(reg=0.01)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    decoders_bio_old, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio_old=np.dot(act_bio,decoders_bio_old)
+    rmse_bio_old=rmse(sim.data[probe_direct],xhat_bio_old)
+    # rmse_lif=rmse(sim.data[probe_direct],sim.data[probe_lif])
+
+    return decoders_bio_old, xhat_bio_old, rmse_bio_old
 
 
 def test_ff_new_LIF_old_decoders(plt):
@@ -78,9 +84,23 @@ def test_ff_new_LIF_old_decoders(plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
+    pre_neurons=100
+    bio_neurons=20
+    tau_nengo=0.01
+    tau_neuron=0.01
+    dt_nengo=0.001
+    dt_neuron=0.0001
+    bio_seed=6
+    t_final=1.0
+    dim=2
+    n_syn=10
+    signal='prime_sinusoids'
+    decoders_bio=None
+
     pre_seed=9
     cutoff_mixed=0.3
     cutoff_compare=0.3
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_ff()
 
     with nengo.Network() as model:
         """
@@ -157,11 +177,23 @@ def test_ff_new_signal_old_decoders(plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
+    pre_neurons=100
+    bio_neurons=20
+    tau_nengo=0.01
+    tau_neuron=0.01
+    dt_nengo=0.001
+    dt_neuron=0.0001
+    t_final=1.0
+    dim=2
+    n_syn=10
+    decoders_bio=None
+
     pre_seed = 3
     bio_seed = 6
     signal = 'step_input'
     cutoff_mixed = 0.5
     cutoff_compare = 0.5
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_ff()
 
     with nengo.Network() as model:
         """
@@ -220,7 +252,6 @@ def test_ff_new_signal_old_decoders(plt):
     assert rmse_compare < cutoff_compare
 
 
-
 def test_ff_new_LIF_new_signal_old_decoders(plt):
     """
     Change the LIF input (seed) and the signal type (step_input) 
@@ -232,10 +263,23 @@ def test_ff_new_LIF_new_signal_old_decoders(plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
+    pre_neurons=100
+    bio_neurons=20
+    tau_nengo=0.01
+    tau_neuron=0.01
+    dt_nengo=0.001
+    dt_neuron=0.0001
+    bio_seed=6
+    t_final=1.0
+    dim=2
+    n_syn=10
+    decoders_bio=None
+
     pre_seed=9
     signal = 'step_input'
     cutoff_mixed=0.5
     cutoff_compare=0.5
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_ff()
 
     with nengo.Network() as model:
         """

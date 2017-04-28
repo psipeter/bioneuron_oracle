@@ -8,12 +8,14 @@ import seaborn as sns
 
 pre_neurons=100
 bio_neurons=20
+post_neurons=100
 tau_nengo=0.01
 tau_neuron=0.01
 dt_nengo=0.001
 dt_neuron=0.0001
 pre_seed=3
 bio_seed=6
+post_seed=9
 t_final=1.0
 dim=2
 assert dim % 2 == 0
@@ -149,12 +151,16 @@ def test_slicing(plt):
     legend3 = plt.legend() #prop={'size':8}
     assert rmse_bio_1 < cutoff
     assert rmse_bio_2 < cutoff
-    
+
+
+def test_two_outputs(plt):
+
     """
-    Simulate a network [stim1]-[LIF1]-[BIO]-[LIF3]
-                       [stim2]-[LIF2]-[BIO]-[LIF4]
-    bio_decoders: decoders out of [BIO] that are trained
-                     by the oracle method (iterative)
+    Simulate a network [stim]-[LIF]-[BIO]-[LIF1]
+                                         -[LIF2]
+                             -[Direct]-[Direct_out]
+    decoders_bio: decoders out of [BIO] that are trained
+                  by the oracle method (iterative)
     w_train: soft-mux parameter that governs what fraction of
              [BIO]-out decoders are computed
              randomly vs from the oracle method
@@ -162,7 +168,84 @@ def test_slicing(plt):
              (Johnson-Lindenstrauss lemma)
     """
 
-            # conn3.bio_decoders = (1 - w_train)*bio_decoders  # HACK
+    cutoff=0.3
+
+    def sim_two_outputs(w_train=1, decoders_bio=None):
+
+        if decoders_bio is None:
+            decoders_bio=np.zeros((bio_neurons, dim))
+
+        with nengo.Network() as model:
+
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+
+            lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                                seed=pre_seed, neuron_type=nengo.LIF())
+            bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
+                                seed=bio_seed, neuron_type=BahlNeuron())
+            direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                     neuron_type=nengo.Direct())
+            lif1 = nengo.Ensemble(n_neurons=post_neurons, dimensions=dim/2,
+                                seed=post_seed, neuron_type=nengo.LIF())
+            lif2 = nengo.Ensemble(n_neurons=post_neurons, dimensions=dim/2,
+                                seed=2*post_seed, neuron_type=nengo.LIF())
+            direct_out = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                     neuron_type=nengo.Direct())
+
+            nengo.Connection(stim, lif, synapse=None)
+            nengo.Connection(lif, bio, synapse=tau_neuron, weights_bias_conn=True)
+            conn1 = nengo.Connection(bio[0], lif1, synapse=tau_nengo)
+            conn2 = nengo.Connection(bio[1], lif2, synapse=tau_nengo)
+            nengo.Connection(lif, direct, synapse=tau_nengo)
+            nengo.Connection(direct, direct_out, synapse=tau_nengo)
+            #todo - test output to node, direct, etc
+
+            probe_stim = nengo.Probe(stim, synapse=None)
+            probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+            probe_lif1 = nengo.Probe(lif1, synapse=tau_nengo)
+            probe_lif2 = nengo.Probe(lif2, synapse=tau_nengo)
+            probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
+
+            conn1.decoders_bio = (1. - w_train) * decoders_bio[:,0]
+            conn2.decoders_bio = (1. - w_train) * decoders_bio[:,1]
+            print conn1.decoders_bio
+            print conn2.decoders_bio
+
+        with nengo.Simulator(model,dt=dt_nengo) as sim:
+            sim.run(t_final)
+
+        lpf = nengo.Lowpass(tau_nengo)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        assert np.sum(act_bio) > 0.0
+        solver = nengo.solvers.LstsqL2(reg=0.1)
+        decoders_bio_new, info = solver(act_bio, sim.data[probe_direct_out])
+
+        sns.set(context='poster')
+        plt.subplot(1,1,1)
+        rmse_lif1=rmse(sim.data[probe_lif1], sim.data[probe_direct_out][:,0])
+        rmse_lif2=rmse(sim.data[probe_lif2], sim.data[probe_direct_out][:,1])
+        plt.plot(sim.trange(), sim.data[probe_lif1],
+                 label='[STIM]-[LIF]-[BIO]-[LIF1], rmse=%.5f' % rmse_lif1)
+        plt.plot(sim.trange(), sim.data[probe_lif2],
+                 label='[STIM]-[LIF]-[BIO]-[LIF2], rmse=%.5f' % rmse_lif2)
+        plt.plot(sim.trange(), sim.data[probe_direct_out][:,0],
+                 label='[STIM]-[LIF]-[LIF_EQ]-[Direct][0]')
+        plt.plot(sim.trange(), sim.data[probe_direct_out][:,1],
+                 label='[STIM]-[LIF]-[LIF_EQ]-[Direct][1]')
+        plt.xlabel('time (s)')
+        plt.ylabel('$\hat{x}(t)$')
+        plt.title('decode')
+        legend3 = plt.legend() #prop={'size':8}
+
+        return decoders_bio_new, rmse_lif1, rmse_lif2
+
+    decoders_bio_new, rmse_lif1, rmse_lif2 = sim_two_outputs(w_train=1, decoders_bio=None)
+    decoders_bio_new, rmse_lif1, rmse_lif2 = sim_two_outputs(w_train=0, decoders_bio=decoders_bio_new)
+
+    assert rmse_lif1 < cutoff
+    assert rmse_lif2 < cutoff
+
+                # conn3.decoders_bio = (1 - w_train)*decoders_bio  # HACK
 #         if jl_dims > 0:
 #             # TODO: magnitude should scale with n_neurons somehow (maybe 1./n^2)?
 #             jl_decoders = np.random.RandomState(seed=333).randn(n_neurons, jl_dims) * 1e-4
