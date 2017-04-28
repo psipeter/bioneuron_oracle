@@ -30,7 +30,6 @@ class BahlNeuron(nengo.neurons.NeuronType):
         Compare the current and previous spike arrays for this bioneuron.
         If they're different, the neuron has spiked.
         """
-
         neuron.run(time*1000)
         for i, nrn in enumerate(neurons):
             count = len(nrn.spikes) - nrn.num_spikes_last

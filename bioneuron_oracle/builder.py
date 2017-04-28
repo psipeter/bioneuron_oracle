@@ -2,10 +2,11 @@ import nengo
 import numpy as np
 import neuron
 from nengo.builder import Builder, Operator, Signal
+from nengo.base import ObjView
 from nengo.dists import get_samples
-from nengo.builder.connection import build_decoders
-from nengo.builder.connection import BuiltConnection
+from nengo.builder.connection import (build_decoders, BuiltConnection)
 from nengo.builder.ensemble import get_activities
+from nengo.utils.builder import full_transform
 from BahlNeuron import BahlNeuron, Bahl, ExpSyn
 from nengo.exceptions import NengoException, BuildError
 
@@ -107,6 +108,7 @@ def build_bahlneuron(model, neuron_type, ens):
             ens.ensemble.encoders = encoders
             ens.ensemble.gain = gains
     model.add_op(op)
+    neuron.init()
 
 
 @Builder.register(nengo.Connection)
@@ -119,37 +121,44 @@ def build_connection(model, conn):
     in init_connection().
     Adds a transmit_spike operator for this connection to the model
     """
-    conn_into_bioneuron = (
-        isinstance(conn.post, nengo.Ensemble) and
-        isinstance(conn.post.neuron_type, BahlNeuron))
-    if hasattr(conn.pre, 'neuron_type'):
-        conn_out_bioneuron = (
-            isinstance(conn.pre.neuron_type, BahlNeuron) and
-            isinstance(conn.post, nengo.Ensemble))
-    else:
-        conn_out_bioneuron = False
 
-    if conn_into_bioneuron:
-        # conn.pre must output spikes to connect to bioneurons
-        if not hasattr(conn.pre, 'neuron_type'):
+    conn_into_bioneuron = False
+    conn_into_bioneuron_slice = False
+    conn_out_bioneuron = False
+    if isinstance(conn.post, ObjView) and isinstance(conn.post.obj.neuron_type, BahlNeuron):
+        conn_into_bioneuron_slice = True
+        conn_post = conn.post.obj
+    elif isinstance(conn.post, nengo.Ensemble) and isinstance(conn.post.neuron_type, BahlNeuron):
+        conn_into_bioneuron = True
+        conn_post = conn.post
+    if isinstance(conn.pre, ObjView):
+        conn_pre = conn.pre.obj
+    elif isinstance(conn.pre, nengo.Ensemble):
+        conn_pre = conn.pre
+
+    #todo - more output-side checks for slicing etc.
+    elif hasattr(conn.pre, 'neuron_type'):
+        if isinstance(conn.pre.neuron_type, BahlNeuron) and isinstance(conn.post, nengo.Ensemble):
+            conn_out_bioneuron = True
+
+    if conn_into_bioneuron or conn_into_bioneuron_slice:
+        # conn_pre must output spikes to connect to bioneurons
+        if not hasattr(conn_pre, 'neuron_type'):
             raise BuildError("%s must transmit spikes to bioneurons in %s"\
-                             % (conn.pre, conn.post))
-            # raise BioConnectionError(conn.pre, conn.post)
-                # 
-        if not 'spikes' in conn.pre.neuron_type.probeable:
+                             % (conn_pre, conn_post))
+        if not 'spikes' in conn_pre.neuron_type.probeable:
             raise BuildError("%s must transmit spikes to bioneurons in %s"\
-                 % (conn.pre, conn.post))
-            # raise BioConnectionError(conn.pre, conn.post)
-                   # "input %s to bioensemble %s must transmit spikes"\
-                   # % (conn.pre, conn.post))
+                 % (conn_pre, conn_post))
         # Todo: other error handling
         rng = np.random.RandomState(model.seeds[conn])
-        model.sig[conn]['in'] = model.sig[conn.pre]['out']
-        transform = get_samples(conn.transform, conn.size_out,
-                                d=conn.size_mid, rng=rng)
+        model.sig[conn]['in'] = model.sig[conn_pre]['out']
+        transform = full_transform(conn, slice_pre=False)
+        # transform2 = get_samples(conn.transform, conn.size_out,
+        #                         d=conn.size_mid, rng=rng)
+
 
         """
-        Given a parcicular connection, labeled by id(conn.pre),
+        Given a parcicular connection, labeled by conn.pre,
         compute the optimal decoders, generate locations for synapses,
         then create a synapse with weight equal to
         w_ij=np.dot(d_i,alpha_j*e_j)+w_bias, where
@@ -159,43 +168,43 @@ def build_connection(model, conn):
         Afterwards add synapses to bioneuron.synapses and call neuron.init().
         """
         conn.syn_loc = get_synaptic_locations(
-            rng, conn.pre.n_neurons, conn.post.n_neurons,
+            rng, conn_pre.n_neurons, conn_post.n_neurons,
             conn.syn_sec, conn.n_syn, seed=model.seeds[conn])
         conn.syn_weights = np.zeros((
-            conn.post.n_neurons, conn.pre.n_neurons, conn.syn_loc.shape[2]))
+            conn_post.n_neurons, conn_pre.n_neurons, conn.syn_loc.shape[2]))
         # emulated biases in weight space
         if conn.weights_bias_conn:
             conn.weights_bias = gen_weights_bias(
-                conn.pre.n_neurons, conn.post.n_neurons, conn.pre.dimensions,
-                conn.post.dimensions, conn.pre.seed, conn.post.seed)
+                conn_pre.n_neurons, conn_post.n_neurons, conn_pre.dimensions,
+                conn_post.dimensions, conn_pre.seed, conn_post.seed)
         eval_points, weights, solver_info = build_decoders(
             model, conn, rng, transform)
 
-        for bionrn in range(len(conn.post.neuron_type.neurons)):
-            bioneuron = conn.post.neuron_type.neurons[bionrn]
+        for bionrn in range(len(conn_post.neuron_type.neurons)):
+            bioneuron = conn_post.neuron_type.neurons[bionrn]
             d_in = weights.T  # untested for BIO-BIO connections
             loc = conn.syn_loc[bionrn]
-            if hasattr(conn,'weights_bias'):  
+            if conn.weights_bias_conn:
                 w_bias = conn.weights_bias[:,bionrn]
             tau = conn.synapse.tau
-            encoder = conn.post.encoders[bionrn]
-            gain = conn.post.gain[bionrn]
-            bioneuron.synapses[id(conn.pre)] = np.empty((loc.shape[0],loc.shape[1]),dtype=object)
+            encoder = conn_post.encoders[bionrn]
+            gain = conn_post.gain[bionrn]
+            bioneuron.synapses[conn_pre] = np.empty((loc.shape[0],loc.shape[1]),dtype=object)
             for pre in range(loc.shape[0]):
                 for syn in range(loc.shape[1]):
                     section = bioneuron.cell.apical(loc[pre,syn])
                     w_ij = np.dot(d_in[pre],gain*encoder)
-                    if hasattr(conn,'weights_bias'):  
+                    if conn.weights_bias_conn:  
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # todo: better n_syn scaling
                     conn.syn_weights[bionrn,pre,syn] = w_ij  # update full weight matrix
                     synapse = ExpSyn(section,w_ij,tau)  # create the synapse
-                    bioneuron.synapses[id(conn.pre)][pre][syn] = synapse            
-        neuron.init()    
+                    bioneuron.synapses[conn_pre][pre][syn] = synapse            
+        neuron.init()
         
         model.add_op(TransmitSpikes(
-            id(conn.pre), id(conn.post), conn.post.neuron_type.neurons,
-            model.sig[conn.pre]['out'], states=[model.time]))
+            conn_pre, conn_post, conn_post.neuron_type.neurons,
+            model.sig[conn_pre]['out'], states=[model.time]))
         # note: transform, weights do not affect X-to-BIO connections (todo: untested)
         model.params[conn] = BuiltConnection(eval_points=eval_points,
                                                 solver_info=solver_info,
@@ -204,9 +213,8 @@ def build_connection(model, conn):
 
     if conn_out_bioneuron:
         rng = np.random.RandomState(model.seeds[conn])
-        model.sig[conn]['in'] = model.sig[conn.pre]['out']
-        transform = get_samples(conn.transform, conn.size_out,
-                                d=conn.size_mid, rng=rng)
+        model.sig[conn]['in'] = model.sig[conn_pre]['out']
+        transform = full_transform(conn, slice_pre=False)
         # Update decoders out of bioensembles, presumably by using the Oracle method.
         eval_points, weights, solver_info = build_decoders(
             model, conn, rng, transform)
@@ -275,13 +283,3 @@ def get_synaptic_locations(rng, pre_neurons, n_neurons,
     # unique locations per connection and per bioneuron (uses conn's rng)
     syn_locations=rng.uniform(0,1,size=(n_neurons,pre_neurons,n_syn))
     return syn_locations
-
-
-class BioConnectionError(BuildError):
-    """
-    An error occured while building connections into
-    or out of a bioensemble
-    """
-    # def __init__(self, pre, post):
-    #     self.pre = pre
-    #     self.post = post

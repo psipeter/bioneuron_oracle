@@ -41,17 +41,17 @@ with nengo.Network() as model:
     direct = nengo.Ensemble(n_neurons=1, dimensions=dim, 
                             neuron_type=nengo.Direct(),)
 
-    nengo.Connection(stim,pre,synapse=None)
-    nengo.Connection(pre,bio,synapse=tau_neuron)
+    nengo.Connection(stim, pre, synapse=None)
+    nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
     # nengo.Connection(pre,lif,synapse=tau_nengo)
-    nengo.Connection(stim,direct,synapse=tau_nengo)
+    nengo.Connection(stim, direct, synapse=tau_nengo)
 
-    probe_stim = nengo.Probe(stim,synapse=None)
+    probe_stim = nengo.Probe(stim, synapse=None)
     # probe_pre = nengo.Probe(pre,synapse=tau_nengo)
     # probe_lif = nengo.Probe(lif,synapse=tau_nengo)
-    probe_direct = nengo.Probe(direct,synapse=tau_nengo)
+    probe_direct = nengo.Probe(direct, synapse=tau_nengo)
     # probe_pre_spikes = nengo.Probe(pre.neurons,'spikes')
-    probe_bio_spikes = nengo.Probe(bio.neurons,'spikes')
+    probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
     # probe_lif_spikes = nengo.Probe(lif.neurons,'spikes')
     
 with nengo.Simulator(model,dt=dt_nengo) as sim:
@@ -102,17 +102,17 @@ def test_ff_new_LIF_old_decoders(plt):
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim, 
                                 neuron_type=nengo.Direct(),)
 
-        nengo.Connection(stim,pre,synapse=None)
-        nengo.Connection(pre,bio,synapse=tau_neuron)
+        nengo.Connection(stim, pre, synapse=None)
+        nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
         # nengo.Connection(pre,lif,synapse=tau_nengo)
-        nengo.Connection(stim,direct,synapse=tau_nengo)
+        nengo.Connection(stim, direct, synapse=tau_nengo)
 
-        probe_stim = nengo.Probe(stim,synapse=None)
+        probe_stim = nengo.Probe(stim, synapse=None)
         # probe_pre = nengo.Probe(pre,synapse=tau_nengo)
         # probe_lif = nengo.Probe(lif,synapse=tau_nengo)
-        probe_direct = nengo.Probe(direct,synapse=tau_nengo)
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         # probe_pre_spikes = nengo.Probe(pre.neurons,'spikes')
-        probe_bio_spikes = nengo.Probe(bio.neurons,'spikes')
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
         # probe_lif_spikes = nengo.Probe(lif.neurons,'spikes')
         
     with nengo.Simulator(model,dt=dt_nengo) as sim:
@@ -157,10 +157,11 @@ def test_ff_new_signal_old_decoders(plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
-    pre_seed=3
+    pre_seed = 3
+    bio_seed = 6
     signal = 'step_input'
-    cutoff_mixed=0.5
-    cutoff_compare=0.5
+    cutoff_mixed = 0.5
+    cutoff_compare = 0.5
 
     with nengo.Network() as model:
         """
@@ -181,7 +182,7 @@ def test_ff_new_signal_old_decoders(plt):
                                 neuron_type=nengo.Direct(),)
 
         nengo.Connection(stim,pre,synapse=None)
-        nengo.Connection(pre,bio,synapse=tau_neuron)
+        nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
         nengo.Connection(stim,direct,synapse=tau_nengo)
 
         probe_stim = nengo.Probe(stim,synapse=None)
@@ -255,7 +256,7 @@ def test_ff_new_LIF_new_signal_old_decoders(plt):
                                 neuron_type=nengo.Direct(),)
 
         nengo.Connection(stim,pre,synapse=None)
-        nengo.Connection(pre,bio,synapse=tau_neuron)
+        nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
         nengo.Connection(stim,direct,synapse=tau_nengo)
 
         probe_stim = nengo.Probe(stim,synapse=None)
