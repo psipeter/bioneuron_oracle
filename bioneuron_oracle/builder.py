@@ -138,7 +138,7 @@ def build_connection(model, conn):
             conn_out_bioneuron = True
     elif isinstance(conn.pre, nengo.Ensemble):
         conn_pre = conn.pre
-        if hasattr(conn.pre, 'neuron_type') and isinstance(conn.pre.neuron_type, BahlNeuron):
+        if hasattr(conn_pre, 'neuron_type') and isinstance(conn_pre.neuron_type, BahlNeuron):
             conn_out_bioneuron = True
 
     if conn_into_bioneuron or conn_into_bioneuron_slice:
@@ -214,14 +214,13 @@ def build_connection(model, conn):
                                                 weights=conn.syn_weights)
 
     # if conn_out_bioneuron:
-    #     rng = np.random.RandomState(model.seeds[conn])
-    #     model.sig[conn]['in'] = model.sig[conn_pre]['out']
-    #     # transform = full_transform(conn, slice_pre=False)
-    #     transform2 = get_samples(conn.transform, conn.size_out,
-    #                             d=conn.size_mid, rng=rng)
-    #     # Grab decoders out of the bioneurons from the BioSolver for this conn
-    #     eval_points, weights, solver_info = build_decoders(
-    #         model, conn, rng, transform2)
+        # rng = np.random.RandomState(model.seeds[conn])
+        # transform = np.array(full_transform(conn, slice_pre=False))
+        # transform2 = get_samples(conn.transform, conn.size_out,
+        #                         d=conn.size_mid, rng=rng)
+        # Grab decoders out of the bioneurons from the BioSolver for this conn
+        # eval_points, weights, solver_info = build_decoders(
+        #     model, conn, rng, transform)
 
     #     # Extra stuff from nengo's build_connection()
     #     model.sig[conn]['in'] = model.sig[conn_pre]['out']
@@ -246,7 +245,7 @@ def build_connection(model, conn):
 
         # model.params[conn] = BuiltConnection(eval_points=eval_points,
         #                                     solver_info=solver_info,
-        #                                     transform=transform2,
+        #                                     transform=transform,
         #                                     weights=weights)
 
     else: #normal connection
