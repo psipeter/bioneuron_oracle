@@ -209,6 +209,63 @@ def test_slice_in(plt):
     assert rmse_bio_2 < cutoff
 
 
+
+def test_slice_in_2(plt):
+
+    """
+    Simulate a network [stim1]-[LIF1][0]-[BIO][0]
+
+    test passes if:
+        - rmse_bio < cutoff for both sets of dimenions
+          (slicing preserves vectors)
+    """
+
+    cutoff=0.4
+    dim=2
+
+    with nengo.Network() as model:
+
+        stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[0])
+
+        lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                            seed=pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
+                            seed=bio_seed, neuron_type=BahlNeuron())
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                 neuron_type=nengo.Direct())
+
+        nengo.Connection(stim, lif[0], synapse=None)
+        nengo.Connection(lif[0], bio[0], synapse=tau_neuron, weights_bias_conn=True)
+        nengo.Connection(stim, direct[0], synapse=tau_nengo)
+
+        probe_stim = nengo.Probe(stim, synapse=None)
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+    
+    with nengo.Simulator(model,dt=dt_nengo) as sim:
+        sim.run(t_final)
+
+    # todo: call NEURON garbage collection
+
+    lpf = nengo.Lowpass(tau_nengo)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    assert np.sum(act_bio) > 0.0
+    solver = nengo.solvers.LstsqL2(reg=0.1)
+    decoders_bio, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio = np.dot(act_bio, decoders_bio)
+    
+    sns.set(context='poster')
+    plt.subplot(1,1,1)
+    rmse_bio=rmse(sim.data[probe_direct][:,0], xhat_bio[:,0])
+    plt.plot(sim.trange(), xhat_bio[:,0], label='bio dim 1, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_direct][:,0], label='direct')
+    plt.xlabel('time (s)')
+    plt.ylabel('$\hat{x}(t)$')
+    plt.title('decode')
+    legend3 = plt.legend() #prop={'size':8}
+    assert rmse_bio < cutoff
+
+
 def test_slice_out(plt):
 
     """
