@@ -7,6 +7,25 @@ from bioneuron_oracle.solver import BioSolver
 from nengo.utils.numpy import rmse
 import seaborn as sns
 
+
+pre_neurons=100
+bio_neurons=100
+post_neurons=100
+tau_nengo=0.01
+tau_neuron=0.01
+dt_nengo=0.001
+dt_neuron=0.0001
+lif_seed=3
+bio_seed=6
+pre_seed=9
+t_final=1.0
+dim=1
+jl_dims=3
+n_syn=10
+signal='prime_sinusoids'
+decoders_bio=None
+cutoff=0.3
+
 def test_integrator_no_jl_dims(plt):
 
     """
@@ -20,23 +39,6 @@ def test_integrator_no_jl_dims(plt):
     jl_dims: extra dimensions for the oracle training
              (Johnson-Lindenstrauss lemma)
     """
-    pre_neurons=200
-    bio_neurons=200
-    post_neurons=200
-    tau_nengo=0.01
-    tau_neuron=0.01
-    dt_nengo=0.001
-    dt_neuron=0.0001
-    pre_seed=3
-    bio_seed=6
-    post_seed=9
-    t_final=1.0
-    dim=1
-    n_syn=10
-    signal='prime_sinusoids'
-    decoders_bio=None
-
-    cutoff=0.3
 
     def sim(w_train, decoders_bio=None,plots=False):
 
@@ -48,22 +50,38 @@ def test_integrator_no_jl_dims(plt):
             stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
 
             lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                                seed=lif_seed, neuron_type=nengo.LIF())
+            pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
                                 seed=pre_seed, neuron_type=nengo.LIF())
-            bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
+            bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                                 seed=bio_seed, neuron_type=BahlNeuron())
+            # integral = nengo.Node(size_in=1)
             direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
                                      neuron_type=nengo.Direct())
 
-            bio_solver = BioSolver(decoders_bio=(1.0 - w_train) * decoders_bio)
+            bio_solver = BioSolver(decoders_bio=(1.0-w_train)*decoders_bio)
 
             nengo.Connection(stim, lif, synapse=None)
-            nengo.Connection(lif, bio, synapse=tau_neuron, weights_bias_conn=True)
-            nengo.Connection(lif, direct, synapse=tau_nengo)
-            nengo.Connection(bio, bio, synapse=tau_nengo, solver=bio_solver)
+            nengo.Connection(lif, bio, synapse=tau_neuron,
+                             transform=tau_neuron, weights_bias_conn=True)
+            nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
+
+            # nengo.Connection(stim, integral, synapse=1/s)
+            # nengo.Connection(integral, pre, synapse=None)
+            # nengo.Connection(pre, bio[:dim],
+            #                  synapse=tau_neuron, transform=w_train)
+
+            nengo.Connection(stim, direct, synapse=tau_nengo, transform=tau_nengo)
+            nengo.Connection(direct, direct, transform=1, synapse=tau_nengo)
+            nengo.Connection(direct, pre, synapse=None)
+            # oracle on the recurrent connection
+            nengo.Connection(pre, bio, synapse=tau_neuron, transform=0)
+            # nengo.Connection(pre, bio, synapse=tau_neuron, transform=w_train)
 
             probe_stim = nengo.Probe(stim, synapse=None)
             probe_bio = nengo.Probe(bio, synapse=tau_neuron, solver=bio_solver)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+            # probe_integral = nengo.Probe(integral, synapse=None)
             probe_direct = nengo.Probe(direct, synapse=tau_nengo)
 
         with nengo.Simulator(model,dt=dt_nengo) as sim:
@@ -74,15 +92,16 @@ def test_integrator_no_jl_dims(plt):
         assert np.sum(act_bio) > 0.0
         solver = nengo.solvers.LstsqL2(reg=0.1)
         decoders_bio_new, info = solver(act_bio, sim.data[probe_direct])
+        xhat_bio = np.dot(act_bio, decoders_bio_new)
         rmse_bio=rmse(sim.data[probe_bio], sim.data[probe_direct])
 
         if plots:
             sns.set(context='poster')
             plt.subplot(1,1,1)
-            plt.plot(sim.trange(), sim.data[probe_bio],
-                     label='[STIM]-[LIF]-[BIO]-[probe]')
-            plt.plot(sim.trange(), sim.data[probe_direct],
-                     label='[STIM]-[LIF]-[LIF_EQ]-[Direct]')
+            # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
+            plt.plot(sim.trange(), sim.data[probe_bio], label='bio')
+            plt.plot(sim.trange(), xhat_bio, label='bio manual')
+            plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
             plt.xlabel('time (s)')
             plt.ylabel('$\hat{x}(t)$')
             plt.title('decode')
@@ -91,11 +110,9 @@ def test_integrator_no_jl_dims(plt):
         return decoders_bio_new, rmse_bio
 
     decoders_bio_new, rmse_bio = sim(w_train=1.0, decoders_bio=None)
-    # decoders_bio_new, rmse_bio, rmse_bio2 = sim(w_train=0.5, decoders_bio=decoders_bio_new)
     decoders_bio_new, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
 
     assert rmse_bio < cutoff
-    assert rmse_bio2 < cutoff
 
 
 def test_integrator_with_jl_dims(plt):
@@ -111,24 +128,6 @@ def test_integrator_with_jl_dims(plt):
     jl_dims: extra dimensions for the oracle training
              (Johnson-Lindenstrauss lemma)
     """
-    pre_neurons=200
-    bio_neurons=200
-    post_neurons=200
-    tau_nengo=0.01
-    tau_neuron=0.01
-    dt_nengo=0.001
-    dt_neuron=0.0001
-    pre_seed=3
-    bio_seed=6
-    pre2_seed=9
-    t_final=1.0
-    dim=1
-    jl_dims=3
-    n_syn=10
-    signal='prime_sinusoids'
-    decoders_bio=None
-
-    cutoff=0.3
 
     def sim(w_train, decoders_bio=None,plots=False):
 
@@ -140,11 +139,12 @@ def test_integrator_with_jl_dims(plt):
             stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
 
             lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=pre_seed, neuron_type=nengo.LIF())
+                                seed=lif_seed, neuron_type=nengo.LIF())
             pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=pre2_seed, neuron_type=nengo.LIF())
+                                seed=pre_seed, neuron_type=nengo.LIF())
             bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim+jl_dims,
                                 seed=bio_seed, neuron_type=BahlNeuron())
+            # integral = nengo.Node(size_in=1)
             direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
                                      neuron_type=nengo.Direct())
 
@@ -156,15 +156,15 @@ def test_integrator_with_jl_dims(plt):
 
             nengo.Connection(stim, lif, synapse=None)
             # connect feedforward to non-jl_dims of bio
-            nengo.Connection(lif, bio[:dim],
-            				 synapse=tau_neuron, weights_bias_conn=True)
-            nengo.Connection(lif, direct, synapse=tau_nengo)
+            nengo.Connection(lif, bio[:dim], synapse=tau_neuron,
+                             transform=tau_neuron, weights_bias_conn=True)
+            nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
+
+            nengo.Connection(stim, direct, synapse=tau_nengo, transform=tau_nengo)
+            nengo.Connection(direct, direct, transform=1, synapse=tau_nengo)
             nengo.Connection(direct, pre, synapse=None)
-            # oracle on the recurrent connection (trans=tau makes integrator)
-            nengo.Connection(pre, bio[:dim],
-            				 synapse=tau_neuron, transform=tau_neuron)
-            # full connectivity w/ jl_dims on recurrent bio connection
-            nengo.Connection(bio, bio, synapse=tau_nengo, solver=bio_solver)
+            # oracle on the recurrent connection
+            nengo.Connection(pre, bio[:dim], synapse=tau_neuron, transform=0)
 
             probe_stim = nengo.Probe(stim, synapse=None)
             probe_bio = nengo.Probe(bio, synapse=tau_neuron, solver=bio_solver)
@@ -179,13 +179,17 @@ def test_integrator_with_jl_dims(plt):
         assert np.sum(act_bio) > 0.0
         solver = nengo.solvers.LstsqL2(reg=0.1)
         decoders_bio_new, info = solver(act_bio, sim.data[probe_direct])
-        rmse_bio=rmse(sim.data[probe_bio][:,:dim], sim.data[probe_direct])
+        xhat_bio = np.dot(act_bio, decoders_bio_new)
+        rmse_bio=rmse(sim.data[probe_bio][:,:dim], sim.data[probe_direct][:dim])
+        rmse_bio_xhat=rmse(xhat_bio, sim.data[probe_direct][:dim])
 
         if plots:
             sns.set(context='poster')
             plt.subplot(1,1,1)
-            plt.plot(sim.trange(), sim.data[probe_bio][:,:dim], label='BIO[:dim]')
-            plt.plot(sim.trange(), sim.data[probe_direct], label='Direct')
+            # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
+            plt.plot(sim.trange(), sim.data[probe_bio][:,:dim], label='bio[:dim]')
+            plt.plot(sim.trange(), xhat_bio, label='bio manual')
+            plt.plot(sim.trange(), sim.data[probe_direct][:,:dim], label='direct')
             plt.xlabel('time (s)')
             plt.ylabel('$\hat{x}(t)$')
             plt.title('decode')
@@ -194,8 +198,6 @@ def test_integrator_with_jl_dims(plt):
         return decoders_bio_new, rmse_bio
 
     decoders_bio_new, rmse_bio = sim(w_train=1.0, decoders_bio=None)
-    # decoders_bio_new, rmse_bio, rmse_bio2 = sim(w_train=0.5, decoders_bio=decoders_bio_new)
     decoders_bio_new, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
 
     assert rmse_bio < cutoff
-    assert rmse_bio2 < cutoff

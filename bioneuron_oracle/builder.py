@@ -126,6 +126,7 @@ def build_connection(model, conn):
     conn_into_bioneuron = False
     conn_into_bioneuron_slice = False
     conn_out_bioneuron = False
+    conn_out_bioneuron_slice = False
     if isinstance(conn.post, ObjView) and isinstance(conn.post.obj.neuron_type, BahlNeuron):
         conn_into_bioneuron_slice = True
         conn_post = conn.post.obj
@@ -135,7 +136,7 @@ def build_connection(model, conn):
     if isinstance(conn.pre, ObjView):
         conn_pre = conn.pre.obj
         if hasattr(conn_pre, 'neuron_type') and isinstance(conn_pre.neuron_type, BahlNeuron):
-            conn_out_bioneuron = True
+            conn_out_bioneuron_slice = True
     elif isinstance(conn.pre, nengo.Ensemble):
         conn_pre = conn.pre
         if hasattr(conn_pre, 'neuron_type') and isinstance(conn_pre.neuron_type, BahlNeuron):
@@ -150,12 +151,10 @@ def build_connection(model, conn):
             raise BuildError("%s must transmit spikes to bioneurons in %s"\
                  % (conn_pre, conn_post))
         # Todo: other error handling
+        
         rng = np.random.RandomState(model.seeds[conn])
         model.sig[conn]['in'] = model.sig[conn_pre]['out']
         transform = full_transform(conn, slice_pre=False)
-        # transform2 = get_samples(conn.transform, conn.size_out,
-        #                         d=conn.size_mid, rng=rng)
-
 
         """
         Given a parcicular connection, labeled by conn.pre,
@@ -173,18 +172,28 @@ def build_connection(model, conn):
             conn.syn_sec, conn.n_syn, seed=model.seeds[conn])
         conn.syn_weights = np.zeros((
             conn_post.n_neurons, conn_pre.n_neurons, conn.syn_loc.shape[2]))
+
         # emulated biases in weight space
         if conn.weights_bias_conn:
             conn.weights_bias = gen_weights_bias(
                 conn_pre.n_neurons, conn_post.n_neurons, conn_pre.dimensions,
                 conn_post.dimensions, conn_pre.seed, conn_post.seed)
+
         # Grab decoders from this connections BioSolver
         eval_points, weights, solver_info = build_decoders(
             model, conn, rng, transform)
+        # print 'conn in weights builder', weights.T
+
+        # unit test that synapse and weight arrays are compatible shapes
+        # todo: more tests
+        if (conn.weights_bias_conn and
+                not conn.syn_loc.shape[:-1] == conn.weights_bias.T.shape):
+            raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
+                             % (conn.syn_loc.shape[:-1], conn.weights_bias,T.shape))
 
         for bionrn in range(len(conn_post.neuron_type.neurons)):
             bioneuron = conn_post.neuron_type.neurons[bionrn]
-            d_in = weights.T  # untested for BIO-BIO connections
+            d_in = weights.T
             loc = conn.syn_loc[bionrn]
             if conn.weights_bias_conn:
                 w_bias = conn.weights_bias[:,bionrn]
@@ -207,46 +216,85 @@ def build_connection(model, conn):
         model.add_op(TransmitSpikes(
             conn_pre, conn_post, conn_post.neuron_type.neurons,
             model.sig[conn_pre]['out'], states=[model.time]))
-        # note: transform, weights do not affect X-to-BIO connections (todo: untested)
         model.params[conn] = BuiltConnection(eval_points=eval_points,
                                                 solver_info=solver_info,
                                                 transform=transform,
                                                 weights=conn.syn_weights)
 
-    # if conn_out_bioneuron:
-        # rng = np.random.RandomState(model.seeds[conn])
-        # transform = np.array(full_transform(conn, slice_pre=False))
-        # transform2 = get_samples(conn.transform, conn.size_out,
-        #                         d=conn.size_mid, rng=rng)
-        # Grab decoders out of the bioneurons from the BioSolver for this conn
-        # eval_points, weights, solver_info = build_decoders(
-        #     model, conn, rng, transform)
+    if conn_out_bioneuron or conn_out_bioneuron_slice:
+        from nengo.node import Node
+        from nengo.ensemble import Ensemble, Neurons
+        from nengo.neurons import Direct
 
-    #     # Extra stuff from nengo's build_connection()
-    #     model.sig[conn]['in'] = model.sig[conn_pre]['out']
-    #     in_signal = model.sig[conn]['in']
-    #     # Add operator for applying weights
-    #     model.sig[conn]['weights'] = Signal(
-    #         weights, name="%s.weights" % conn, readonly=True)
-    #     signal = Signal(np.zeros(conn.size_out), name="%s.weighted" % conn)
-    #     model.add_op(Reset(signal))
-    #     op = ElementwiseInc if weights.ndim < 2 else DotInc
-    #     model.add_op(op(model.sig[conn]['weights'],
-    #                     in_signal,
-    #                     signal,
-    #                     tag="%s.weights_elementwiseinc" % conn))
-    #     # Add operator for filtering
-    #     if conn.synapse is not None:
-    #         signal = model.build(conn.synapse, signal)
-    #     # Store the weighted-filtered output in case we want to probe it
-    #     model.sig[conn]['weighted'] = signal
-    #     # Copy to the proper slice
-    #     # model.add_op(Copy(signal, model.sig[conn]['out'], dst_slice=conn.post_slice))
+        # Start by copying the whole nengo build_connecition method,
+        # then remove stuff/change stuff as necssary
+        # Create random number generator
+        rng = np.random.RandomState(model.seeds[conn])
 
-        # model.params[conn] = BuiltConnection(eval_points=eval_points,
-        #                                     solver_info=solver_info,
-        #                                     transform=transform,
-        #                                     weights=weights)
+        # Get input and output connections from pre and post
+        def get_prepost_signal(is_pre):
+            target = conn.pre_obj if is_pre else conn.post_obj
+            key = 'out' if is_pre else 'in'
+
+            if target not in model.sig:
+                raise BuildError("Building %s: the %r object %s is not in the "
+                                 "model, or has a size of zero."
+                                 % (conn, 'pre' if is_pre else 'post', target))
+            if key not in model.sig[target]:
+                raise BuildError(
+                    "Building %s: the %r object %s has a %r size of zero."
+                    % (conn, 'pre' if is_pre else 'post', target, key))
+
+            return model.sig[target][key]
+
+        model.sig[conn]['in'] = get_prepost_signal(is_pre=True)
+        model.sig[conn]['out'] = get_prepost_signal(is_pre=False)
+
+        weights = None
+        eval_points = None
+        solver_info = None
+        signal_size = conn.size_out
+        post_slice = conn.post_slice
+        transform = full_transform(conn, slice_pre=False)
+
+        # Figure out the signal going across this connection
+        in_signal = model.sig[conn]['in']
+        eval_points, weights, solver_info = build_decoders(
+            model, conn, rng, transform)
+        if conn.solver.weights:
+            model.sig[conn]['out'] = model.sig[conn.post_obj.neurons]['in']
+            signal_size = conn.post_obj.neurons.size_in
+            post_slice = None  # don't apply slice later
+
+        # Add operator for applying weights
+        model.sig[conn]['weights'] = Signal(
+            weights, name="%s.weights" % conn, readonly=True)
+        signal = Signal(np.zeros(signal_size), name="%s.weighted" % conn)
+        model.add_op(Reset(signal))
+        # ElementwiseInc breaks transforms out of bioensembles
+        # op = ElementwiseInc if weights.ndim < 2 else DotInc
+        op = DotInc
+        model.add_op(op(model.sig[conn]['weights'],
+                        in_signal,
+                        signal,
+                        tag="%s.weights_elementwiseinc" % conn))
+
+        # Add operator for filtering
+        if conn.synapse is not None:
+            signal = model.build(conn.synapse, signal)
+
+        # Store the weighted-filtered output in case we want to probe it
+        model.sig[conn]['weighted'] = signal
+
+        # Copy to the proper slice
+        model.add_op(Copy(
+            signal, model.sig[conn]['out'], dst_slice=post_slice,
+            inc=True, tag="%s" % conn))
+
+        model.params[conn] = BuiltConnection(eval_points=eval_points,
+                                             solver_info=solver_info,
+                                             transform=transform,
+                                             weights=weights)
 
     else: #normal connection
         return nengo.builder.connection.build_connection(model, conn)
