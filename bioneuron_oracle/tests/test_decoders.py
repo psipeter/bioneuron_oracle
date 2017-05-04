@@ -3,7 +3,7 @@ import numpy as np
 import neuron
 import seaborn as sns
 from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
-from bioneuron_oracle.custom_signals import prime_sinusoids, step_input
+from bioneuron_oracle.signals import prime_sinusoids, step_input
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
 from functools32 import lru_cache

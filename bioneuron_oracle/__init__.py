@@ -10,7 +10,7 @@ from .BioConnection import BioConnection
 from .monkeypatch import patch_connections, unpatch_connections
 from BahlNeuron import *
 from builder import *
-from custom_signals import *
+from signals import *
 import pytest
 
 patch_connections()
