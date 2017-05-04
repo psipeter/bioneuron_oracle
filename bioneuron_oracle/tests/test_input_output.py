@@ -80,11 +80,11 @@ def test_transform_in(plt):
     legend3 = plt.legend() #prop={'size':8}
     assert rmse_bio < cutoff
 
-def test_two_inputs(plt):
+def test_two_inputs_two_dims(plt):
 
     """
-    Simulate a network [stim1]-[LIF1]-[BIO]
-                       [stim2]-[LIF2]-[BIO]
+    Simulate a network [stim1]-[LIF1]-[BIO][0]
+                       [stim2]-[LIF2]-[BIO][1]
     test passes if:
         - rmse_bio < cutoff for both sets of dimenions
           (slicing preserves vectors)
@@ -94,12 +94,12 @@ def test_two_inputs(plt):
 
     with nengo.Network() as model:
 
-        stim1 = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[0:dim])
-        stim2 = nengo.Node(lambda t: prime_sinusoids(t, 2*dim, t_final)[dim:2*dim])
+        stim1 = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[0:dim/2])
+        stim2 = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[dim/2:dim])
 
-        lif1 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+        lif1 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim/2,
                             seed=pre_seed, neuron_type=nengo.LIF())
-        lif2 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+        lif2 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim/2,
                             seed=2*pre_seed, neuron_type=nengo.LIF())
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
                             seed=bio_seed, neuron_type=BahlNeuron())
@@ -108,10 +108,10 @@ def test_two_inputs(plt):
 
         nengo.Connection(stim1, lif1, synapse=None)
         nengo.Connection(stim2, lif2, synapse=None)
-        nengo.Connection(lif1, bio, synapse=tau_neuron, weights_bias_conn=True)
-        nengo.Connection(lif2, bio, synapse=tau_neuron)
-        nengo.Connection(stim1, direct, synapse=tau_nengo)
-        nengo.Connection(stim2, direct, synapse=tau_nengo)
+        nengo.Connection(lif1, bio[0], synapse=tau_neuron, weights_bias_conn=True)
+        nengo.Connection(lif2, bio[1], synapse=tau_neuron)
+        nengo.Connection(stim1, direct[0], synapse=tau_nengo)
+        nengo.Connection(stim2, direct[1], synapse=tau_nengo)
 
         probe_stim1 = nengo.Probe(stim1, synapse=None)
         probe_stim2 = nengo.Probe(stim2, synapse=None)
@@ -133,7 +133,7 @@ def test_two_inputs(plt):
     sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio=rmse(sim.data[probe_direct], xhat_bio)
-    plt.plot(sim.trange(), xhat_bio, label='bio dim 1, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
     plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
     plt.xlabel('time (s)')
     plt.ylabel('$\hat{x}(t)$')
@@ -141,6 +141,66 @@ def test_two_inputs(plt):
     legend3 = plt.legend() #prop={'size':8}
     assert rmse_bio < cutoff
 
+def test_two_inputs_one_dim(plt):
+
+    """
+    Simulate a network [stim1]-[LIF1]-[BIO][0]
+                       [stim2]-[LIF2]-[BIO][0]
+    test passes if:
+        - rmse_bio < cutoff for both sets of dimenions
+          (slicing preserves vectors)
+    """
+
+    cutoff=0.4
+
+    with nengo.Network() as model:
+
+        stim1 = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[0:dim/2])
+        stim2 = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final)[dim/2:dim])
+
+        lif1 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim/2,
+                            seed=pre_seed, neuron_type=nengo.LIF())
+        lif2 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim/2,
+                            seed=2*pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim/2, 
+                            seed=bio_seed, neuron_type=BahlNeuron())
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim/2,
+                                 neuron_type=nengo.Direct())
+
+        nengo.Connection(stim1, lif1, synapse=None)
+        nengo.Connection(stim2, lif2, synapse=None)
+        nengo.Connection(lif1, bio[0], synapse=tau_neuron, weights_bias_conn=True)
+        nengo.Connection(lif2, bio[0], synapse=tau_neuron)
+        nengo.Connection(stim1, direct[0], synapse=tau_nengo)
+        nengo.Connection(stim2, direct[0], synapse=tau_nengo)
+
+        probe_stim1 = nengo.Probe(stim1, synapse=None)
+        probe_stim2 = nengo.Probe(stim2, synapse=None)
+        probe_lif1 = nengo.Probe(lif1, synapse=tau_nengo)
+        probe_lif2 = nengo.Probe(lif2, synapse=tau_nengo)
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+
+    with nengo.Simulator(model,dt=dt_nengo) as sim:
+        sim.run(t_final)
+
+    lpf = nengo.Lowpass(tau_nengo)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    assert np.sum(act_bio) > 0.0
+    solver = nengo.solvers.LstsqL2(reg=0.1)
+    decoders_bio, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio = np.dot(act_bio, decoders_bio)
+    
+    sns.set(context='poster')
+    plt.subplot(1,1,1)
+    rmse_bio=rmse(sim.data[probe_direct], xhat_bio)
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
+    plt.xlabel('time (s)')
+    plt.ylabel('$\hat{x}(t)$')
+    plt.title('decode')
+    legend3 = plt.legend() #prop={'size':8}
+    assert rmse_bio < cutoff
 
 def test_slice_in(plt):
 
