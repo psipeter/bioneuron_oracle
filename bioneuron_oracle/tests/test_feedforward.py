@@ -5,6 +5,7 @@ import seaborn as sns
 from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
 from bioneuron_oracle.signals import prime_sinusoids, step_input
 from nengo.utils.matplotlib import rasterplot
+from nengo.utils.numpy import rmse
 from functools32 import lru_cache
 
 pre_neurons=50
@@ -42,7 +43,7 @@ with nengo.Network() as model:
                             neuron_type=nengo.Direct(),)
 
     nengo.Connection(stim, pre, synapse=None)
-    nengo.Connection(pre,bio, synapse=tau_neuron, weights_bias_conn=True)
+    nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
     nengo.Connection(pre, lif, synapse=tau_nengo)
     nengo.Connection(stim, direct, synapse=tau_nengo)
 
@@ -53,6 +54,7 @@ with nengo.Network() as model:
     probe_pre_spikes = nengo.Probe(pre.neurons, 'spikes')
     probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
     probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
+    probe_lif_voltage = nengo.Probe(lif.neurons, 'voltage')
 
 @lru_cache(maxsize=None)
 def sim_feedforward():
@@ -121,7 +123,6 @@ def test_voltage(plt):
             plt.title('voltage')
         assert f_sat < cutoff_sat
         assert f_eq < cutoff_eq
-
 
 def test_feedforward_decode(plt):
     """

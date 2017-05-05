@@ -1,6 +1,3 @@
-# I'm probably just missing something simple here with the monkeypatch.
-# I modeled it off the links you put in the googledoc, but I keep getting
-# maximum recursion depth exceeded errors when I call the super() constructor.
 from nengo import Connection as NengoConnection
 from nengo.solvers import LstsqL2
 from nengo.connection import ConnectionFunctionParam, TransformParam
@@ -22,8 +19,7 @@ class BioConnection(NengoConnection):
         syn_sec: the section(s) of the NEURON model on which
                     to distribute synapses
         n_syn: number of synapses on the bioneuron per presynaptic neuron
-        weight_bias_conn: (bool) use this connection
-                            to emulate bioneuron biases
+        weight_bias_conn: use this connection to emulate bioneuron biases
         """
         self.syn_sec = syn_sec
         self.n_syn = n_syn

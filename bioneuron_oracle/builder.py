@@ -25,9 +25,6 @@ class SimBahlNeuron(Operator):
         self.updates = []
         self.incs = []
         self.neuron_type.neurons = [Bahl() for _ in range(n_neurons)]
-        # self.inputs stores the input decoders, connection weights,
-        # synaptic locations, and synaptic filter (tau)
-        # for each connection into bionrn
         self.inputs = {}
 
     def make_step(self, signals, dt, rng):
@@ -100,14 +97,13 @@ def build_bahlneuron(model, neuron_type, ens):
                        states=[model.time])
     # Initialize specific encoders and gains,
     # if this hasn't already been done
-    # todo: should this go in build_bahlneuron() or SimBahlNeuron() instead?
-    if not hasattr(ens.ensemble, 'encoders') or\
-       not isinstance(ens.ensemble.encoders, np.ndarray):
-            encoders, gains = gen_encoders_gains(
-                ens.ensemble.n_neurons, ens.ensemble.dimensions,
-                ens.ensemble.seed)
-            ens.ensemble.encoders = encoders
-            ens.ensemble.gain = gains
+    if (not hasattr(ens.ensemble, 'encoders') or
+            not isinstance(ens.ensemble.encoders, np.ndarray)):
+        encoders, gains = gen_encoders_gains(
+            ens.ensemble.n_neurons, ens.ensemble.dimensions,
+            ens.ensemble.seed)
+        ens.ensemble.encoders = encoders
+        ens.ensemble.gain = gains
     model.add_op(op)
     neuron.init()
 
@@ -154,7 +150,7 @@ def build_connection(model, conn):
         if 'spikes' not in conn_pre.neuron_type.probeable:
             raise BuildError("%s must transmit spikes to bioneurons in %s"
                              % (conn_pre, conn_post))
-        # Todo: other error handling
+        # todo: other error handling?
 
         rng = np.random.RandomState(model.seeds[conn])
         model.sig[conn]['in'] = model.sig[conn_pre]['out']
@@ -186,10 +182,9 @@ def build_connection(model, conn):
         # Grab decoders from this connections BioSolver
         eval_points, weights, solver_info = build_decoders(
             model, conn, rng, transform)
-        # print 'conn in weights builder', weights.T
 
         # unit test that synapse and weight arrays are compatible shapes
-        # todo: more tests
+        # todo: more tests?
         if (conn.weights_bias_conn and
                 not conn.syn_loc.shape[:-1] == conn.weights_bias.T.shape):
             raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
@@ -214,7 +209,7 @@ def build_connection(model, conn):
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # todo: better n_syn scaling
                     conn.syn_weights[bionrn, pre, syn] = w_ij
-                    synapse = ExpSyn(section, w_ij, tau)  # create the synapse
+                    synapse = ExpSyn(section, w_ij, tau)
                     bioneuron.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
 
@@ -227,6 +222,10 @@ def build_connection(model, conn):
                                              weights=conn.syn_weights)
 
     if conn_out_bioneuron or conn_out_bioneuron_slice:
+        # todo: this is redundant with nengo's build_connection() except
+        # for one line change, which may break things down the road,
+        # but it was the only way I could get transforms and slilces 
+        # out of bioneurons to work
         rng = np.random.RandomState(model.seeds[conn])
 
         # Get input and output connections from pre and post
@@ -269,9 +268,11 @@ def build_connection(model, conn):
             weights, name="%s.weights" % conn, readonly=True)
         signal = Signal(np.zeros(signal_size), name="%s.weighted" % conn)
         model.add_op(Reset(signal))
-        # ElementwiseInc breaks transforms out of bioensembles
+
+        """ElementwiseInc breaks transforms out of bioensembles"""
         # op = ElementwiseInc if weights.ndim < 2 else DotInc
         op = DotInc
+
         model.add_op(op(model.sig[conn]['weights'],
                         in_signal,
                         signal,
