@@ -163,38 +163,21 @@ def build_connection(model, conn):
     Adds a transmit_spike operator for this connection to the model
     """
 
-    conn_into_bioneuron = False
-    conn_into_bioneuron_slice = False
-    conn_out_bioneuron = False
-    conn_out_bioneuron_slice = False
-    if (isinstance(conn.post, ObjView)
-            and isinstance(conn.post.obj.neuron_type, BahlNeuron)):
-        conn_into_bioneuron_slice = True
-        conn_post = conn.post.obj
-    elif (isinstance(conn.post, nengo.Ensemble)
-            and isinstance(conn.post.neuron_type, BahlNeuron)):
-        conn_into_bioneuron = True
-        conn_post = conn.post
-    if isinstance(conn.pre, ObjView):
-        conn_pre = conn.pre.obj
-        if (hasattr(conn_pre, 'neuron_type')
-                and isinstance(conn_pre.neuron_type, BahlNeuron)):
-            conn_out_bioneuron_slice = True
-    elif isinstance(conn.pre, nengo.Ensemble):
-        conn_pre = conn.pre
-        if (hasattr(conn_pre, 'neuron_type')
-                and isinstance(conn_pre.neuron_type, BahlNeuron)):
-            conn_out_bioneuron = True
+    def deref_objview(o):
+        return o.obj if isinstance(o, ObjView) else o
 
-    if conn_into_bioneuron or conn_into_bioneuron_slice:
+    conn_pre = deref_objview(conn.pre)
+    conn_post = deref_objview(conn.post)
+
+    if isinstance(conn_post, nengo.Ensemble) and \
+       isinstance(conn_post.neuron_type, BahlNeuron):
         # conn_pre must output spikes to connect to bioneurons
-        if not hasattr(conn_pre, 'neuron_type'):
-            raise BuildError("%s must transmit spikes to bioneurons in %s"
-                             % (conn_pre, conn_post))
-        if 'spikes' not in conn_pre.neuron_type.probeable:
-            raise BuildError("%s must transmit spikes to bioneurons in %s"
-                             % (conn_pre, conn_post))
-        # todo: other error handling?
+        # TODO: other error handling?
+        # TODO: detect this earlier inside BioConnection __init__
+        if not isinstance(conn_pre, nengo.Ensemble) or \
+           'spikes' not in conn_pre.neuron_type.probeable:
+            raise BuildError("May only connect spiking neurons (pre=%s) to "
+                             "bioneurons (post=%s)" % (conn_pre, conn_post))
 
         rng = np.random.RandomState(model.seeds[conn])
         model.sig[conn]['in'] = model.sig[conn_pre]['out']
@@ -251,7 +234,7 @@ def build_connection(model, conn):
                     w_ij = np.dot(d_in[pre], gain * encoder)
                     if conn.weights_bias_conn:
                         w_ij += w_bias[pre]
-                    w_ij /= conn.n_syn  # todo: better n_syn scaling
+                    w_ij /= conn.n_syn  # TODO: better n_syn scaling
                     syn_weights[bionrn, pre, syn] = w_ij
                     synapse = ExpSyn(section, w_ij, tau)
                     bioneuron.synapses[conn_pre][pre][syn] = synapse
@@ -265,7 +248,8 @@ def build_connection(model, conn):
                                              transform=transform,
                                              weights=syn_weights)
 
-    if conn_out_bioneuron or conn_out_bioneuron_slice:
+    elif (isinstance(conn_pre, nengo.Ensemble) and
+          isinstance(conn_pre.neuron_type, BahlNeuron)):
         # TODO: this is redundant with nengo's build_connection() except
         # for one line change, which may break things down the road,
         # but it was the only way I could get transforms and slilces
