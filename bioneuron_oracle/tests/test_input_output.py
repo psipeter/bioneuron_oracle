@@ -1,7 +1,7 @@
 import nengo
 import numpy as np
 import neuron
-from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
+from bioneuron_oracle.bahl_neuron import BahlNeuron, Bahl, ExpSyn
 from bioneuron_oracle.signals import prime_sinusoids, step_input
 from bioneuron_oracle.solver import BioSolver
 from nengo.utils.numpy import rmse

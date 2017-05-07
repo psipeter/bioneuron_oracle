@@ -1,7 +1,7 @@
 import nengo
 import bioneuron_oracle
 from nengo import Connection as NengoConnection
-from BioConnection import BioConnection
+from bio_connection import BioConnection
 
 
 def patch_connections(connection=True):

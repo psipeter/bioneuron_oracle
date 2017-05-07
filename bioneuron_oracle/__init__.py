@@ -6,9 +6,9 @@ neuron models, using least-squares solvers and the oracle
 to compute decoders for bioneurons
 """
 
-from .BioConnection import BioConnection
+from .bio_connection import BioConnection
 from .monkeypatch import patch_connections, unpatch_connections
-from BahlNeuron import *
+from .bahl_neuron import *
 from builder import *
 from signals import *
 import pytest

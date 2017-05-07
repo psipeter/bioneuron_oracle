@@ -8,7 +8,7 @@ from nengo.builder.operator import Copy, DotInc, ElementwiseInc, Reset
 from nengo.builder.connection import (build_decoders, BuiltConnection)
 from nengo.builder.ensemble import get_activities
 from nengo.utils.builder import full_transform
-from BahlNeuron import BahlNeuron, Bahl, ExpSyn
+from bahl_neuron import BahlNeuron, Bahl, ExpSyn
 from nengo.exceptions import BuildError
 
 
