@@ -1,2 +1,7 @@
 *.py[co]
 *.ipynb_checkpoints
+*.egg-info
+*.swp
+.cache
+bioneuron_oracle/NEURON_models/bahl.ho
+bioneuron_oracle/NEURON_models/channels/x86_64/
