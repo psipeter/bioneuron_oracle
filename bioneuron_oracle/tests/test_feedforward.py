@@ -108,10 +108,10 @@ def test_voltage(plt):
           which would indicate that synaptic inputs are understimulating
           (or not being delivered)
     """
-    sim_feedforward()  # unused return sim
+    sim = sim_feedforward()
     cutoff_sat = 0.3
     cutoff_eq = 0.5
-    for bioneuron in bio.neuron_type.neurons:
+    for bioneuron in sim.data[bio.neurons]:
         V = np.array(bioneuron.v_record)
         time = np.array(bioneuron.t_record)
         t_saturated = len(np.where((-40.0 < V) & (V < -20.0))[0])

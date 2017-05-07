@@ -61,15 +61,15 @@ class SimBahlNeuron(Operator):
     Operator to simulate the states of a bioensemble through time.
     """
 
-    def __init__(self, neuron_type, n_neurons, output, voltage, states):
+    def __init__(self, neuron_type, neurons, output, voltage, states):
         super(SimBahlNeuron, self).__init__()
         self.neuron_type = neuron_type
+        self.neurons = neurons
+
         self.reads = [states[0]]
         self.sets = [output, voltage]
         self.updates = []
         self.incs = []
-        self.neuron_type.neurons = [Bahl() for _ in range(n_neurons)]
-        self.inputs = {}
 
     def make_step(self, signals, dt, rng):
         output = signals[self.output]
@@ -77,8 +77,7 @@ class SimBahlNeuron(Operator):
         time = signals[self.time]
 
         def step_nrn():
-            self.neuron_type.step_math(dt, output, self.neuron_type.neurons,
-                                       voltage, time)
+            self.neuron_type.step_math(dt, output, self.neurons, voltage, time)
         return step_nrn
 
     @property
@@ -131,25 +130,32 @@ class TransmitSpikes(Operator):
 
 
 @Builder.register(BahlNeuron)
-def build_bahlneuron(model, neuron_type, ens):
-    model.sig[ens]['voltage'] = Signal(np.zeros(ens.ensemble.n_neurons),
-                                       name='%s.voltage' % ens.ensemble.label)
+def build_bahlneuron(model, neuron_type, neurons):
+    ens = neurons.ensemble
+    bahl_neurons = [Bahl() for _ in range(ens.n_neurons)]
+
+    model.sig[neurons]['voltage'] = Signal(
+        np.zeros(ens.n_neurons),
+        name='%s.voltage' % ens.label)
     op = SimBahlNeuron(neuron_type=neuron_type,
-                       n_neurons=ens.ensemble.n_neurons,
-                       output=model.sig[ens]['out'],
-                       voltage=model.sig[ens]['voltage'],
+                       neurons=bahl_neurons,
+                       output=model.sig[neurons]['out'],
+                       voltage=model.sig[neurons]['voltage'],
                        states=[model.time])
+
     # Initialize specific encoders and gains,
     # if this hasn't already been done
-    if (not hasattr(ens.ensemble, 'encoders') or
-            not isinstance(ens.ensemble.encoders, np.ndarray)):
+    if (not hasattr(ens, 'encoders') or
+            not isinstance(ens.encoders, np.ndarray)):
         encoders, gains = gen_encoders_gains(
-            ens.ensemble.n_neurons, ens.ensemble.dimensions,
-            ens.ensemble.seed)
-        ens.ensemble.encoders = encoders
-        ens.ensemble.gain = gains
+            ens.n_neurons, ens.dimensions, ens.seed)
+        ens.encoders = encoders
+        ens.gain = gains
     model.add_op(op)
     neuron.init()
+
+    assert neurons not in model.params
+    model.params[neurons] = bahl_neurons
 
 
 @Builder.register(nengo.Connection)
@@ -217,15 +223,16 @@ def build_connection(model, conn):
             raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
                              % (syn_loc.shape[:-1], weights_bias))
 
-        for bionrn in range(len(conn_post.neuron_type.neurons)):
-            bioneuron = conn_post.neuron_type.neurons[bionrn]
+        neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
+        for j, bioneuron in enumerate(neurons):
+            assert isinstance(bioneuron, Bahl)
             d_in = weights.T
-            loc = syn_loc[bionrn]
+            loc = syn_loc[j]
             if conn.weights_bias_conn:
-                w_bias = weights_bias[:, bionrn]
+                w_bias = weights_bias[:, j]
             tau = conn.synapse.tau
-            encoder = conn_post.encoders[bionrn]
-            gain = conn_post.gain[bionrn]
+            encoder = conn_post.encoders[j]
+            gain = conn_post.gain[j]
             bioneuron.synapses[conn_pre] = np.empty(
                 (loc.shape[0], loc.shape[1]), dtype=object)
             for pre in range(loc.shape[0]):
@@ -235,13 +242,13 @@ def build_connection(model, conn):
                     if conn.weights_bias_conn:
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # TODO: better n_syn scaling
-                    syn_weights[bionrn, pre, syn] = w_ij
+                    syn_weights[j, pre, syn] = w_ij
                     synapse = ExpSyn(section, w_ij, tau)
                     bioneuron.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
 
         model.add_op(TransmitSpikes(
-            conn_pre, conn_post, conn_post.neuron_type.neurons,
+            conn_pre, conn_post, neurons,
             model.sig[conn_pre]['out'], states=[model.time]))
         model.params[conn] = BuiltConnection(eval_points=eval_points,
                                              solver_info=solver_info,

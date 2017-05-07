@@ -78,7 +78,7 @@ def test_synapse_g(plt):
 
     with nengo.Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
         # NOTE: syn.get_loc() does not contain section information
-        bioneuron_small = bio_small.neuron_type.neurons[0]
+        bioneuron_small = sim.data[bio_small.neurons][0]
         bioneuron_small.v_syn_record = neuron.h.Vector()
         bioneuron_small.g_syn_record = neuron.h.Vector()
         location = bioneuron_small.synapses[pre][0][0].syn.get_loc()
@@ -87,7 +87,7 @@ def test_synapse_g(plt):
         bioneuron_small.g_syn_record.record(
             bioneuron_small.synapses[pre][0][0].syn._ref_g)
 
-        bioneuron_medium = bio_medium.neuron_type.neurons[0]
+        bioneuron_medium = sim.data[bio_medium.neurons][0]
         bioneuron_medium.v_syn_record = neuron.h.Vector()
         bioneuron_medium.g_syn_record = neuron.h.Vector()
         location = bioneuron_medium.synapses[pre][0][0].syn.get_loc()
@@ -96,7 +96,7 @@ def test_synapse_g(plt):
         bioneuron_medium.g_syn_record.record(
             bioneuron_medium.synapses[pre][0][0].syn._ref_g)
 
-        bioneuron_large = bio_large.neuron_type.neurons[0]
+        bioneuron_large = sim.data[bio_large.neurons][0]
         bioneuron_large.v_syn_record = neuron.h.Vector()
         bioneuron_large.g_syn_record = neuron.h.Vector()
         location = bioneuron_large.synapses[pre][0][0].syn.get_loc()
@@ -226,7 +226,7 @@ def test_synapse_tau(plt):
 
     with nengo.Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
         # NOTE: syn.get_loc() does not contain section information
-        bioneuron_small = bio_small.neuron_type.neurons[0]
+        bioneuron_small = sim.data[bio_small.neurons][0]
         bioneuron_small.v_syn_record = neuron.h.Vector()
         bioneuron_small.g_syn_record = neuron.h.Vector()
         location = bioneuron_small.synapses[pre][0][0].syn.get_loc()
@@ -235,7 +235,7 @@ def test_synapse_tau(plt):
         bioneuron_small.g_syn_record.record(
             bioneuron_small.synapses[pre][0][0].syn._ref_g)
 
-        bioneuron_medium = bio_medium.neuron_type.neurons[0]
+        bioneuron_medium = sim.data[bio_medium.neurons][0]
         bioneuron_medium.v_syn_record = neuron.h.Vector()
         bioneuron_medium.g_syn_record = neuron.h.Vector()
         location = bioneuron_medium.synapses[pre][0][0].syn.get_loc()
@@ -244,7 +244,7 @@ def test_synapse_tau(plt):
         bioneuron_medium.g_syn_record.record(
             bioneuron_medium.synapses[pre][0][0].syn._ref_g)
 
-        bioneuron_large = bio_large.neuron_type.neurons[0]
+        bioneuron_large = sim.data[bio_large.neurons][0]
         bioneuron_large.v_syn_record = neuron.h.Vector()
         bioneuron_large.g_syn_record = neuron.h.Vector()
         location = bioneuron_large.synapses[pre][0][0].syn.get_loc()
