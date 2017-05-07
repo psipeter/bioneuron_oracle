@@ -1,19 +1,16 @@
 import numpy as np
 
-import neuron
-
 import nengo
 from nengo.utils.numpy import rmse
 
 from nengolib.signal import s
 
 from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.signals import prime_sinusoids, step_input, equalpower
+from bioneuron_oracle.signals import prime_sinusoids, equalpower
 from bioneuron_oracle.solver import BioSolver
 
 
 def test_integrator(plt):
-
     """
     Simulate a network [stim]-[LIF]-[BIO]-[BIO]
                                    -[LIF]-[LIF]
@@ -27,32 +24,27 @@ def test_integrator(plt):
              (Johnson-Lindenstrauss lemma)
     """
 
-    pre_neurons=100
-    bio_neurons=50
-    post_neurons=100
-    tau_nengo=0.1
-    tau_neuron=0.1
-    dt_nengo=0.001
-    dt_neuron=0.0001
-    lif_seed=3
-    compare_seed=12
-    bio_seed=6
-    pre_seed=9
-    t_final=1.0
-    dim=1
-    jl_dims=0
-    n_syn=10
-    signal='white_noise'
+    pre_neurons = 100
+    bio_neurons = 50
+    tau_nengo = 0.1
+    tau_neuron = 0.1
+    dt_nengo = 0.001
+    lif_seed = 3
+    bio_seed = 6
+    pre_seed = 9
+    t_final = 1.0
+    dim = 1
+    jl_dims = 0
+    signal = 'white_noise'
     if signal == 'white_noise':
-    	max_freq = 5.0
-    	signal_seed = 123
-    decoders_bio=None
-    cutoff=0.1
+        max_freq = 5.0
+        signal_seed = 123
+    cutoff = 0.1
 
-    def sim(w_train, decoders_bio=None,plots=False):
+    def sim(w_train, decoders_bio=None, plots=False):
 
         if decoders_bio is None:
-            decoders_bio=np.zeros((bio_neurons, dim))
+            decoders_bio = np.zeros((bio_neurons, dim))
 
         with nengo.Network() as model:
 
@@ -64,29 +56,31 @@ def test_integrator(plt):
                                       mean=0.0, std=1.0, seed=signal_seed))
 
             lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=lif_seed, neuron_type=nengo.LIF())
+                                 seed=lif_seed, neuron_type=nengo.LIF())
             pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=pre_seed, neuron_type=nengo.LIF(),
-                                max_rates=nengo.dists.Uniform(50,100),
-                                intercepts=nengo.dists.Uniform(-1.0, 1.0))
+                                 seed=pre_seed, neuron_type=nengo.LIF(),
+                                 max_rates=nengo.dists.Uniform(50, 100),
+                                 intercepts=nengo.dists.Uniform(-1.0, 1.0))
             bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim+jl_dims,
-                                seed=bio_seed, neuron_type=BahlNeuron())
+                                 seed=bio_seed, neuron_type=BahlNeuron())
             compare = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                seed=bio_seed, neuron_type=nengo.LIF())
+                                     seed=bio_seed, neuron_type=nengo.LIF())
             integral = nengo.Node(size_in=dim)
 
             bio_solver = BioSolver(decoders_bio=(1.0 - w_train) * decoders_bio)
             if jl_dims > 0:
-	            # todo: magnitude should scale with n_neurons (maybe 1./n^2)?
-	            jl_decoders = np.random.RandomState(seed=333).randn(bio_neurons, jl_dims) * 1e-4
-	            bio_solver.decoders_bio = np.hstack((bio_solver.decoders_bio, jl_decoders))
+                # TODO: magnitude should scale with n_neurons (maybe 1./n^2)?
+                jl_decoders = np.random.RandomState(seed=333).randn(
+                    bio_neurons, jl_dims) * 1e-4
+                bio_solver.decoders_bio = np.hstack(
+                    (bio_solver.decoders_bio, jl_decoders))
 
             nengo.Connection(stim, lif, synapse=None)
             # connect feedforward to non-jl_dims of bio
             nengo.Connection(lif, bio[:dim], weights_bias_conn=True,
-                         	 synapse=tau_neuron, transform=tau_neuron)
+                             synapse=tau_neuron, transform=tau_neuron)
             nengo.Connection(lif, compare, weights_bias_conn=True,
-                         	 synapse=tau_nengo, transform=tau_nengo)
+                             synapse=tau_nengo, transform=tau_nengo)
             nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
             nengo.Connection(compare, compare, synapse=tau_nengo)
 
@@ -95,12 +89,11 @@ def test_integrator(plt):
             nengo.Connection(pre, bio[:dim],  # oracle connection
                              synapse=tau_neuron, transform=w_train)
 
-            probe_stim = nengo.Probe(stim, synapse=None)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_compare_spikes = nengo.Probe(compare.neurons, 'spikes')
             probe_integral = nengo.Probe(integral, synapse=None)
 
-        with nengo.Simulator(model,dt=dt_nengo) as sim:
+        with nengo.Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -119,20 +112,22 @@ def test_integrator(plt):
         rmse_compare = rmse(xhat_compare, target)
 
         if plots:
-            plt.subplot(1,1,1)
+            plt.subplot(1, 1, 1)
             # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
-            plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
-            plt.plot(sim.trange(), xhat_compare, label='lif, rmse=%.5f' % rmse_compare)
+            plt.plot(sim.trange(), xhat_bio,
+                     label='bio, rmse=%.5f' % rmse_bio)
+            plt.plot(sim.trange(), xhat_compare,
+                     label='lif, rmse=%.5f' % rmse_compare)
             plt.plot(sim.trange(), target, label='target')
             plt.xlabel('time (s)')
             plt.ylabel('$\hat{x}(t)$')
             plt.title('decode, n_neurons=%s' % bio_neurons)
-            legend3 = plt.legend()
+            plt.legend()
 
         return decoders_bio_new, rmse_bio
 
-    decoders_bio_new, rmse_bio = sim(w_train=1.0, decoders_bio=None, plots=False)
-    decoders_bio_new, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
+    decoders_bio_new, _ = sim(w_train=1.0, decoders_bio=None, plots=False)
+    _, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
 
     assert rmse_bio < cutoff
 
@@ -144,32 +139,27 @@ def test_pre_switch(plt):
     (LIF and pre) to have different seeds / rates between training and testing.
     """
 
-    pre_neurons=100
-    bio_neurons=50
-    post_neurons=100
-    tau_nengo=0.1
-    tau_neuron=0.1
-    dt_nengo=0.001
-    dt_neuron=0.0001
-    lif_seed=3
-    compare_seed=12
-    bio_seed=6
-    pre_seed=9
-    t_final=1.0
-    dim=2
-    jl_dims=0
-    n_syn=10
-    signal='prime_sinusoids'
+    pre_neurons = 100
+    bio_neurons = 50
+    tau_nengo = 0.1
+    tau_neuron = 0.1
+    dt_nengo = 0.001
+    lif_seed = 3
+    bio_seed = 6
+    pre_seed = 9
+    t_final = 1.0
+    dim = 2
+    jl_dims = 0
+    signal = 'prime_sinusoids'
     if signal == 'white_noise':
-    	max_freq = 5.0
-    	signal_seed = 123
-    decoders_bio=None
-    cutoff=0.1
+        max_freq = 5.0
+        signal_seed = 123
+    cutoff = 0.1
 
-    def sim(w_train, decoders_bio=None,plots=False):
+    def sim(w_train, decoders_bio=None, plots=False):
 
         if decoders_bio is None:
-            decoders_bio=np.zeros((bio_neurons, dim))
+            decoders_bio = np.zeros((bio_neurons, dim))
 
         switch = int(1 + w_train)
 
@@ -182,32 +172,35 @@ def test_pre_switch(plt):
                                       t, dt_nengo, t_final, max_freq, dim,
                                       mean=0.0, std=1.0, seed=signal_seed))
 
+            max_rates = nengo.dists.Uniform(switch*50, switch*100)
             lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=switch*lif_seed, neuron_type=nengo.LIF(),
-                                max_rates=nengo.dists.Uniform(switch*50,switch*100),
-                                intercepts=nengo.dists.Uniform(-1.0, 1.0))
+                                 seed=switch*lif_seed, neuron_type=nengo.LIF(),
+                                 max_rates=max_rates,
+                                 intercepts=nengo.dists.Uniform(-1.0, 1.0))
             pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                seed=switch*pre_seed, neuron_type=nengo.LIF(),
-                                max_rates=nengo.dists.Uniform(switch*50,switch*100),
-                                intercepts=nengo.dists.Uniform(-1.0, 1.0))
+                                 seed=switch*pre_seed, neuron_type=nengo.LIF(),
+                                 max_rates=max_rates,
+                                 intercepts=nengo.dists.Uniform(-1.0, 1.0))
             bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim+jl_dims,
-                                seed=bio_seed, neuron_type=BahlNeuron())
+                                 seed=bio_seed, neuron_type=BahlNeuron())
             compare = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                seed=bio_seed, neuron_type=nengo.LIF())
+                                     seed=bio_seed, neuron_type=nengo.LIF())
             integral = nengo.Node(size_in=dim)
 
             bio_solver = BioSolver(decoders_bio=(1.0 - w_train) * decoders_bio)
             if jl_dims > 0:
-	            # todo: magnitude should scale with n_neurons (maybe 1./n^2)?
-	            jl_decoders = np.random.RandomState(seed=333).randn(bio_neurons, jl_dims) * 1e-4
-	            bio_solver.decoders_bio = np.hstack((bio_solver.decoders_bio, jl_decoders))
+                # TODO: magnitude should scale with n_neurons (maybe 1./n^2)?
+                jl_decoders = np.random.RandomState(seed=333).randn(
+                    bio_neurons, jl_dims) * 1e-4
+                bio_solver.decoders_bio = np.hstack(
+                    (bio_solver.decoders_bio, jl_decoders))
 
             nengo.Connection(stim, lif, synapse=None)
             # connect feedforward to non-jl_dims of bio
             nengo.Connection(lif, bio[:dim], weights_bias_conn=True,
-                         	 synapse=tau_neuron, transform=tau_neuron)
+                             synapse=tau_neuron, transform=tau_neuron)
             nengo.Connection(lif, compare, weights_bias_conn=True,
-                         	 synapse=tau_nengo, transform=tau_nengo)
+                             synapse=tau_nengo, transform=tau_nengo)
             nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
             nengo.Connection(compare, compare, synapse=tau_nengo)
 
@@ -216,12 +209,11 @@ def test_pre_switch(plt):
             nengo.Connection(pre, bio[:dim],  # oracle connection
                              synapse=tau_neuron, transform=w_train)
 
-            probe_stim = nengo.Probe(stim, synapse=None)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_compare_spikes = nengo.Probe(compare.neurons, 'spikes')
             probe_integral = nengo.Probe(integral, synapse=None)
 
-        with nengo.Simulator(model,dt=dt_nengo) as sim:
+        with nengo.Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -240,19 +232,21 @@ def test_pre_switch(plt):
         rmse_compare = rmse(xhat_compare, target)
 
         if plots:
-            plt.subplot(1,1,1)
+            plt.subplot(1, 1, 1)
             # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
-            plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
-            plt.plot(sim.trange(), xhat_compare, label='lif, rmse=%.5f' % rmse_compare)
+            plt.plot(sim.trange(), xhat_bio,
+                     label='bio, rmse=%.5f' % rmse_bio)
+            plt.plot(sim.trange(), xhat_compare,
+                     label='lif, rmse=%.5f' % rmse_compare)
             plt.plot(sim.trange(), target, label='target')
             plt.xlabel('time (s)')
             plt.ylabel('$\hat{x}(t)$')
             plt.title('decode, n_neurons=%s' % bio_neurons)
-            legend3 = plt.legend()
+            plt.legend()
 
         return decoders_bio_new, rmse_bio
 
-    decoders_bio_new, rmse_bio = sim(w_train=1.0, decoders_bio=None, plots=False)
-    decoders_bio_new, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
+    decoders_bio_new, _ = sim(w_train=1.0, decoders_bio=None, plots=False)
+    _, rmse_bio = sim(w_train=0.0, decoders_bio=decoders_bio_new, plots=True)
 
     assert rmse_bio < cutoff

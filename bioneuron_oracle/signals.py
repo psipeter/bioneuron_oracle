@@ -56,6 +56,7 @@ def step_input(t, dim, t_final, dt, n_eval_points=10):
 
     return np.array(get_eval_point(t, eval_points))
 
+
 def equalpower(t, dt, t_final, max_freq, dim, mean=0.0, std=1.0, seed=None):
     from functools32 import lru_cache
 
@@ -84,32 +85,36 @@ def equalpower(t, dt, t_final, max_freq, dim, mean=0.0, std=1.0, seed=None):
         Returns
         -------
         s : array_like
-            Generated signal(s), where each row is a time, and each column a signal
+            Generated signal(s), where each row is a time, and each column a
+            signal
         """
         import numpy.random as npr
 
-        rng=npr.RandomState(seed=seed)
+        rng = npr.RandomState(seed=seed)
         vector_out = n is None
         n = 1 if n is None else n
 
         df = 1. / t_final    # fundamental frequency
 
-        nt = int(np.round(t_final / dt))        # number of time points / frequencies
-        nf = int(np.round(max_freq / df))      # number of non-zero frequencies
+        nt = int(np.round(t_final / dt))  # number of time points / frequencies
+        nf = int(np.round(max_freq / df))  # number of non-zero frequencies
         assert nf < nt
 
         theta = 2*np.pi*rng.rand(n, nf)
         B = np.cos(theta) + 1.0j * np.sin(theta)
 
-        A = np.zeros((n,nt), dtype=np.complex)
-        A[:,1:nf+1] = B
-        A[:,-nf:] = np.conj(B)[:,::-1]
+        A = np.zeros((n, nt), dtype=np.complex)
+        A[:, 1:nf+1] = B
+        A[:, -nf:] = np.conj(B)[:, ::-1]
 
         S = np.fft.ifft(A, axis=1).real
 
-        S = (std / S.std(axis=1))[:,None] * (S - S.mean(axis=1)[:,None] + mean)
-        if vector_out: return S.flatten()
-        else:          return S
+        S = (std / S.std(axis=1))[:, None] * (
+            S - S.mean(axis=1)[:, None] + mean)
+        if vector_out:
+            return S.flatten()
+        else:
+            return S
 
     out = []
     for d in range(dim):

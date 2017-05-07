@@ -5,10 +5,9 @@ import neuron
 import nengo
 from nengo.base import ObjView
 from nengo.builder import Builder, Operator, Signal
-from nengo.builder.operator import Copy, DotInc, ElementwiseInc, Reset
+from nengo.builder.operator import Copy, DotInc, Reset
 from nengo.builder.connection import (build_decoders, BuiltConnection)
 from nengo.builder.ensemble import get_activities
-from nengo.dists import get_samples
 from nengo.exceptions import BuildError
 from nengo.utils.builder import full_transform
 
@@ -267,9 +266,9 @@ def build_connection(model, conn):
                                              weights=conn.syn_weights)
 
     if conn_out_bioneuron or conn_out_bioneuron_slice:
-        # todo: this is redundant with nengo's build_connection() except
+        # TODO: this is redundant with nengo's build_connection() except
         # for one line change, which may break things down the road,
-        # but it was the only way I could get transforms and slilces 
+        # but it was the only way I could get transforms and slilces
         # out of bioneurons to work
         rng = np.random.RandomState(model.seeds[conn])
 

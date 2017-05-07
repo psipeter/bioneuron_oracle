@@ -1,23 +1,18 @@
-import numpy as np
-
 from nengo import Connection as NengoConnection
-from nengo.connection import ConnectionFunctionParam, TransformParam
-from nengo.params import (Default, Unconfigurable, ObsoleteParam,
-                          BoolParam, FunctionParam)
-from nengo.solvers import LstsqL2
+from nengo.params import Default
 
 __all__ = ['BioConnection']
 
 
 class BioConnection(NengoConnection):
-
     """
     Extends nengo.Connection to take additional parameters
     and support oracle decoder updating
     """
-    def __init__(self, pre, post, solver=LstsqL2(),
-                 syn_sec={'apical'},  n_syn=1,
-                 function=Default,transform=Default,
+
+    def __init__(self, pre, post,
+                 syn_sec={'apical'}, n_syn=1,
+                 function=Default, transform=Default,
                  weights_bias_conn=False, decoders_bio=None, **kwargs):
         """
         syn_sec: the section(s) of the NEURON model on which
@@ -34,4 +29,4 @@ class BioConnection(NengoConnection):
         self.weights_bias = None
 
         super(BioConnection, self).__init__(
-            pre, post, solver=solver, function=function, transform=transform, **kwargs)
+            pre, post, function=function, transform=transform, **kwargs)

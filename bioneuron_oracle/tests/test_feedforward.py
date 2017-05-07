@@ -2,28 +2,25 @@ from functools32 import lru_cache
 
 import numpy as np
 
-import neuron
-
 import nengo
-from nengo.utils.numpy import rmse
 from nengo.utils.matplotlib import rasterplot
 
 from bioneuron_oracle.bahl_neuron import BahlNeuron
 from bioneuron_oracle.signals import prime_sinusoids, step_input
 
-pre_neurons=50
-bio_neurons=20
-tau_nengo=0.01
-tau_neuron=0.01
-dt_nengo=0.001
-dt_neuron=0.0001
-pre_seed=3
-bio_seed=6
-t_final=1.0
-dim=2
-n_syn=10
-signal='prime_sinusoids'
-decoders_bio=None
+pre_neurons = 50
+bio_neurons = 20
+tau_nengo = 0.01
+tau_neuron = 0.01
+dt_nengo = 0.001
+dt_neuron = 0.0001
+pre_seed = 3
+bio_seed = 6
+t_final = 1.0
+dim = 2
+n_syn = 10
+signal = 'prime_sinusoids'
+decoders_bio = None
 
 with nengo.Network() as model:
     """
@@ -37,13 +34,13 @@ with nengo.Network() as model:
         stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
 
     pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                        seed=pre_seed, neuron_type=nengo.LIF())
-    bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
-                        seed=bio_seed, neuron_type=BahlNeuron())
-    lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim, 
-                        neuron_type=nengo.LIF(), seed=bio_seed)
-    direct = nengo.Ensemble(n_neurons=1, dimensions=dim, 
-                            neuron_type=nengo.Direct(),)
+                         seed=pre_seed, neuron_type=nengo.LIF())
+    bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                         seed=bio_seed, neuron_type=BahlNeuron())
+    lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                         neuron_type=nengo.LIF(), seed=bio_seed)
+    direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                            neuron_type=nengo.Direct())
 
     nengo.Connection(stim, pre, synapse=None)
     nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
@@ -59,13 +56,15 @@ with nengo.Network() as model:
     probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
     probe_lif_voltage = nengo.Probe(lif.neurons, 'voltage')
 
+
 @lru_cache(maxsize=None)
 def sim_feedforward():
     sim = nengo.Simulator(model, dt=dt_nengo)
     with sim:
         sim.run(t_final)
     return sim
-    # todo: call NEURON garbage collection
+    # TODO: call NEURON garbage collection
+
 
 def test_feedforward_connection(plt):
     """
@@ -73,26 +72,28 @@ def test_feedforward_connection(plt):
     test passes if:
         - a certain number of bioneurons fire at least once
         - this number should be within $cutoff$ %%
-          of the number of active LIFs 
+          of the number of active LIFs
     """
     sim = sim_feedforward()
     plt.subplot(3, 1, 1)
-    rasterplot(sim.trange(),sim.data[probe_pre_spikes], use_eventplot=True)
+    rasterplot(sim.trange(), sim.data[probe_pre_spikes], use_eventplot=True)
     plt.ylabel('PRE')
     plt.title('spike raster')
     plt.yticks([])
     plt.subplot(3, 1, 2)
-    rasterplot(sim.trange(),sim.data[probe_bio_spikes], use_eventplot=True)
+    rasterplot(sim.trange(), sim.data[probe_bio_spikes], use_eventplot=True)
     plt.ylabel('BIO')
     plt.yticks([])
     plt.subplot(3, 1, 3)
-    rasterplot(sim.trange(),sim.data[probe_lif_spikes], use_eventplot=True)
+    rasterplot(sim.trange(), sim.data[probe_lif_spikes], use_eventplot=True)
     plt.xlabel('time (s)')
     plt.ylabel('LIF')
     plt.yticks([])
-    cutoff=0.5
-    n_bio=len(np.nonzero(np.sum(sim.data[probe_bio_spikes],axis=0))[0])  # n_active
-    n_lif=len(np.nonzero(np.sum(sim.data[probe_lif_spikes],axis=0))[0])  # n_active
+    cutoff = 0.5
+    n_bio = len(np.nonzero(
+        np.sum(sim.data[probe_bio_spikes], axis=0))[0])  # n_active
+    n_lif = len(np.nonzero(
+        np.sum(sim.data[probe_lif_spikes], axis=0))[0])  # n_active
     assert (1 - cutoff) * n_lif < n_bio
     assert n_bio < (1 + cutoff) * n_lif
 
@@ -107,9 +108,9 @@ def test_voltage(plt):
           which would indicate that synaptic inputs are understimulating
           (or not being delivered)
     """
-    sim = sim_feedforward()
-    cutoff_sat=0.3
-    cutoff_eq=0.5
+    sim_feedforward()  # unused return sim
+    cutoff_sat = 0.3
+    cutoff_eq = 0.5
     for bioneuron in bio.neuron_type.neurons:
         V = np.array(bioneuron.v_record)
         time = np.array(bioneuron.t_record)
@@ -120,12 +121,14 @@ def test_voltage(plt):
         f_eq = 1. * t_equilibrium / t_total
         if (f_sat < cutoff_sat or f_eq < cutoff_eq):
             plt.subplot(111)
-            plt.plot(time, V, label='saturated=%s, equilibrium=%s' % (f_sat, f_eq))
+            plt.plot(time, V, label='saturated=%s, equilibrium=%s' %
+                                    (f_sat, f_eq))
             plt.xlabel('time (ms)')
             plt.ylabel('voltage (mV)')
             plt.title('voltage')
         assert f_sat < cutoff_sat
         assert f_eq < cutoff_eq
+
 
 def test_feedforward_decode(plt):
     """
@@ -134,24 +137,24 @@ def test_feedforward_decode(plt):
         - rmse_bio is within $cutoff$ %% of rmse_lif
     """
     sim = sim_feedforward()
-    cutoff=0.5
-    plt.subplot(1,1,1)
+    cutoff = 0.5
+    plt.subplot(1, 1, 1)
     lpf = nengo.Lowpass(tau_nengo)
     solver = nengo.solvers.LstsqL2(reg=0.01)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
-    xhat_bio=np.dot(act_bio,decoders_bio)
-    rmse_bio=np.sqrt(np.average((
-        sim.data[probe_direct]-xhat_bio)**2))
-    rmse_lif=np.sqrt(np.average((
-        sim.data[probe_direct]-sim.data[probe_lif])**2))
-    plt.plot(sim.trange(),xhat_bio,label='bio, rmse=%.5f'%rmse_bio)
-    plt.plot(sim.trange(),sim.data[probe_lif],
-        label='lif, rmse=%.5f'%rmse_lif)
-    plt.plot(sim.trange(),sim.data[probe_direct],label='direct')
+    xhat_bio = np.dot(act_bio, decoders_bio)
+    rmse_bio = np.sqrt(np.average((
+        sim.data[probe_direct] - xhat_bio)**2))
+    rmse_lif = np.sqrt(np.average((
+        sim.data[probe_direct] - sim.data[probe_lif])**2))
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_lif],
+             label='lif, rmse=%.5f' % rmse_lif)
+    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
     plt.xlabel('time (s)')
     plt.ylabel('$\hat{x}(t)$')
     plt.title('decode')
-    legend3=plt.legend() #prop={'size':8}
+    plt.legend()  # prop={'size':8}
     assert (1 - cutoff) * rmse_lif < rmse_bio
     assert rmse_bio < (1 + cutoff) * rmse_lif
