@@ -211,15 +211,15 @@ def build_connection(model, conn):
         Afterwards add synapses to bioneuron.synapses and call neuron.init().
         """
         # initialize synaptic locations and weights
-        conn.syn_loc = get_synaptic_locations(
+        syn_loc = get_synaptic_locations(
             rng, conn_pre.n_neurons, conn_post.n_neurons,
             conn.syn_sec, conn.n_syn, seed=model.seeds[conn])
-        conn.syn_weights = np.zeros((
-            conn_post.n_neurons, conn_pre.n_neurons, conn.syn_loc.shape[2]))
+        syn_weights = np.zeros((
+            conn_post.n_neurons, conn_pre.n_neurons, syn_loc.shape[2]))
 
         # emulated biases in weight space
         if conn.weights_bias_conn:
-            conn.weights_bias = gen_weights_bias(
+            weights_bias = gen_weights_bias(
                 conn_pre.n_neurons, conn_post.n_neurons, conn_pre.dimensions,
                 conn_post.dimensions, conn_pre.seed, conn_post.seed)
 
@@ -230,16 +230,16 @@ def build_connection(model, conn):
         # unit test that synapse and weight arrays are compatible shapes
         # todo: more tests?
         if (conn.weights_bias_conn and
-                not conn.syn_loc.shape[:-1] == conn.weights_bias.T.shape):
+                not syn_loc.shape[:-1] == weights_bias.T.shape):
             raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
-                             % (conn.syn_loc.shape[:-1], conn.weights_bias))
+                             % (syn_loc.shape[:-1], weights_bias))
 
         for bionrn in range(len(conn_post.neuron_type.neurons)):
             bioneuron = conn_post.neuron_type.neurons[bionrn]
             d_in = weights.T
-            loc = conn.syn_loc[bionrn]
+            loc = syn_loc[bionrn]
             if conn.weights_bias_conn:
-                w_bias = conn.weights_bias[:, bionrn]
+                w_bias = weights_bias[:, bionrn]
             tau = conn.synapse.tau
             encoder = conn_post.encoders[bionrn]
             gain = conn_post.gain[bionrn]
@@ -252,7 +252,7 @@ def build_connection(model, conn):
                     if conn.weights_bias_conn:
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # todo: better n_syn scaling
-                    conn.syn_weights[bionrn, pre, syn] = w_ij
+                    syn_weights[bionrn, pre, syn] = w_ij
                     synapse = ExpSyn(section, w_ij, tau)
                     bioneuron.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
@@ -263,7 +263,7 @@ def build_connection(model, conn):
         model.params[conn] = BuiltConnection(eval_points=eval_points,
                                              solver_info=solver_info,
                                              transform=transform,
-                                             weights=conn.syn_weights)
+                                             weights=syn_weights)
 
     if conn_out_bioneuron or conn_out_bioneuron_slice:
         # TODO: this is redundant with nengo's build_connection() except

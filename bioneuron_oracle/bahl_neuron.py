@@ -36,7 +36,7 @@ class BahlNeuron(NeuronType):
         neuron.run(time*1000)
         for i, nrn in enumerate(neurons):
             count = len(nrn.spikes) - nrn.num_spikes_last
-            volt = np.array(nrn.v_record)[-1]  # first call neuron.init()
             nrn.num_spikes_last = len(nrn.spikes)
+            volt = np.asarray(nrn.v_record)[-1]  # first call neuron.init()
             spiked[i] = count / dt
             voltage[i] = volt
