@@ -6,11 +6,11 @@ neuron models, using least-squares solvers and the oracle
 to compute decoders for bioneurons
 """
 
-from .bio_connection import BioConnection
-from .monkeypatch import patch_connections, unpatch_connections
-from .bahl_neuron import *
-from builder import *
-from signals import *
-import pytest
+from .bahl_neuron import *  # loads NEURON model
+from .bio_connection import *
+from .builder import *  # executes Builder.register methods
+from .monkeypatch import *
+from .signals import *
 
-patch_connections()
+patch_connections()  # nengo.Connection <-> BioConnection
+

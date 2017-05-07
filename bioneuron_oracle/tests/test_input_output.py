@@ -1,11 +1,13 @@
-import nengo
 import numpy as np
+
 import neuron
-from bioneuron_oracle.bahl_neuron import BahlNeuron, Bahl, ExpSyn
+
+import nengo
+from nengo.utils.numpy import rmse
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
 from bioneuron_oracle.signals import prime_sinusoids, step_input
 from bioneuron_oracle.solver import BioSolver
-from nengo.utils.numpy import rmse
-import seaborn as sns
 
 pre_neurons=100
 bio_neurons=20
@@ -69,7 +71,6 @@ def test_transform_in(plt):
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
     xhat_bio = np.dot(act_bio, decoders_bio)
     
-    sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
     plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
@@ -130,7 +131,6 @@ def test_two_inputs_two_dims(plt):
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
     xhat_bio = np.dot(act_bio, decoders_bio)
     
-    sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio=rmse(sim.data[probe_direct], xhat_bio)
     plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
@@ -191,7 +191,6 @@ def test_two_inputs_one_dim(plt):
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
     xhat_bio = np.dot(act_bio, decoders_bio)
     
-    sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio=rmse(sim.data[probe_direct], xhat_bio)
     plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
@@ -254,7 +253,6 @@ def test_slice_in(plt):
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
     xhat_bio = np.dot(act_bio, decoders_bio)
     
-    sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio_1=rmse(sim.data[probe_direct][:,0:dim/2], xhat_bio[:,0:dim/2])
     rmse_bio_2=rmse(sim.data[probe_direct][:,dim/2:dim], xhat_bio[:,dim/2:dim])
@@ -314,7 +312,6 @@ def test_slice_in_2(plt):
     decoders_bio, info = solver(act_bio, sim.data[probe_direct])
     xhat_bio = np.dot(act_bio, decoders_bio)
     
-    sns.set(context='poster')
     plt.subplot(1,1,1)
     rmse_bio=rmse(sim.data[probe_direct][:,0], xhat_bio[:,0])
     plt.plot(sim.trange(), xhat_bio[:,0], label='bio dim 1, rmse=%.5f' % rmse_bio)
@@ -401,7 +398,6 @@ def test_slice_out(plt):
         # print sim.data[probe_lif2][:,0].sum(), sim.data[probe_direct_out][:,1].sum()
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             plt.plot(sim.trange(), sim.data[probe_bio],
                      label='[STIM]-[LIF]-[BIO][0]-[probe]')
@@ -502,7 +498,6 @@ def test_transform_out(plt):
         # print 'conn out weights', sim.data[conn_out].weights.T        
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             # plt.plot(sim.trange(), sim.data[probe_bio],
             #          label='BIO probe, rmse=%.5f' % rmse_bio)
@@ -600,7 +595,6 @@ def test_bio_to_bio(plt):
         rmse_bio2=rmse(xhat_bio2, sim.data[probe_direct_out])
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             # plt.plot(sim.trange(), sim.data[probe_bio],
             #          label='[STIM]-[LIF]-[BIO]-[probe]')
@@ -703,7 +697,6 @@ def test_bio_to_bio_transform(plt):
         rmse_bio2=rmse(xhat_bio2, sim.data[probe_direct_out])
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             # plt.plot(sim.trange(), sim.data[probe_bio],
             #          label='[STIM]-[LIF]-[BIO]-[probe]')

@@ -1,14 +1,19 @@
+import logging
+
 import nengo
-import bioneuron_oracle
 from nengo import Connection as NengoConnection
-from bio_connection import BioConnection
+
+from bioneuron_oracle.bio_connection import BioConnection
+
+__all__ = ['patch_connections', 'unpatch_connections']
 
 
-def patch_connections(connection=True):
+def patch_connections():
     """Monkeypatches bioneuron connections into Nengo"""
-    if connection:
-        nengo.Connection = BioConnection
+    logging.info("Monkeypatching BioConnection")
+    nengo.Connection = BioConnection
 
 
 def unpatch_connections():
+    logging.info("Unpatching BioConnection")
     nengo.Connection = NengoConnection

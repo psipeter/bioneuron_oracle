@@ -1,12 +1,15 @@
-import nengo
+from functools32 import lru_cache
+
 import numpy as np
+
 import neuron
-import seaborn as sns
-from bioneuron_oracle.bahl_neuron import BahlNeuron, Bahl, ExpSyn
-from bioneuron_oracle.signals import prime_sinusoids, step_input
+
+import nengo
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
-from functools32 import lru_cache
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
+from bioneuron_oracle.signals import prime_sinusoids, step_input
 
 
 @lru_cache(maxsize=None)
@@ -405,7 +408,6 @@ def test_biosolver(plt):
         rmse_old_vs_new_decoding = rmse(xhat_bio, sim.data[probe_bio])
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             plt.plot(sim.trange(), sim.data[probe_bio],
                      label='[STIM]-[LIF]-[BIO]-[probe]')

@@ -1,5 +1,7 @@
 import numpy as np
 
+__all__ = ['prime_sinusoids', 'step_input', 'equalpower']
+
 
 def prime_sinusoids(t, dim, t_final):
     # todo: generate primes

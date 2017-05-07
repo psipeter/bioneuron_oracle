@@ -1,12 +1,15 @@
-import nengo
-import numpy as np
-import neuron
-import seaborn as sns
-from bioneuron_oracle.bahl_neuron import BahlNeuron, Bahl, ExpSyn
-from bioneuron_oracle.signals import prime_sinusoids, step_input
-from nengo.utils.matplotlib import rasterplot
-from nengo.utils.numpy import rmse
 from functools32 import lru_cache
+
+import numpy as np
+
+import neuron
+
+import nengo
+from nengo.utils.numpy import rmse
+from nengo.utils.matplotlib import rasterplot
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
+from bioneuron_oracle.signals import prime_sinusoids, step_input
 
 pre_neurons=50
 bio_neurons=20

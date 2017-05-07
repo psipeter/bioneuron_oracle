@@ -1,12 +1,16 @@
-import nengo
+from functools32 import lru_cache
+
 import numpy as np
+from seaborn import set_palette, color_palette
+
 import neuron
-import seaborn as sns
-from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
-from bioneuron_oracle.signals import prime_sinusoids, step_input
+
+import nengo
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
-from functools32 import lru_cache
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
+from bioneuron_oracle.signals import prime_sinusoids, step_input
 
 
 def test_synapse_g(plt):
@@ -176,8 +180,8 @@ def test_synapse_tau(plt):
 	decoders_bio=None
 	cutoff = 1.0
 
-	# current_palette = sns.color_palette(n_colors=20)
-	sns.set_palette(sns.color_palette("Set1", 9))
+	# current_palette = color_palette(n_colors=20)
+	set_palette(color_palette("Set1", 9))
 	plt.subplot(111)
 	plt.xlabel('time (s)')
 	plt.ylabel('voltage (mV)')

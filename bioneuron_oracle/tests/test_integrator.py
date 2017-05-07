@@ -1,12 +1,15 @@
-import nengo
 import numpy as np
+
 import neuron
-from bioneuron_oracle.BahlNeuron import BahlNeuron, Bahl, ExpSyn
+
+import nengo
+from nengo.utils.numpy import rmse
+
+from nengolib.signal import s
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
 from bioneuron_oracle.signals import prime_sinusoids, step_input, equalpower
 from bioneuron_oracle.solver import BioSolver
-from nengo.utils.numpy import rmse
-import seaborn as sns
-from nengolib.signal import s
 
 
 def test_integrator(plt):
@@ -116,7 +119,6 @@ def test_integrator(plt):
         rmse_compare = rmse(xhat_compare, target)
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
             plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
@@ -238,7 +240,6 @@ def test_pre_switch(plt):
         rmse_compare = rmse(xhat_compare, target)
 
         if plots:
-            sns.set(context='poster')
             plt.subplot(1,1,1)
             # plt.plot(sim.trange(), sim.data[probe_stim], label='stim')
             plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)

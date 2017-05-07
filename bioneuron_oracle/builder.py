@@ -1,15 +1,60 @@
-import nengo
 import numpy as np
+
 import neuron
-from nengo.builder import Builder, Operator, Signal
+
+import nengo
 from nengo.base import ObjView
-from nengo.dists import get_samples
+from nengo.builder import Builder, Operator, Signal
 from nengo.builder.operator import Copy, DotInc, ElementwiseInc, Reset
 from nengo.builder.connection import (build_decoders, BuiltConnection)
 from nengo.builder.ensemble import get_activities
-from nengo.utils.builder import full_transform
-from bahl_neuron import BahlNeuron, Bahl, ExpSyn
+from nengo.dists import get_samples
 from nengo.exceptions import BuildError
+from nengo.utils.builder import full_transform
+
+from bioneuron_oracle.bahl_neuron import BahlNeuron
+
+__all__ = []
+
+
+class Bahl(object):
+    def __init__(self):
+        super(Bahl, self).__init__()
+        self.synapses = {}
+        self.cell = neuron.h.Bahl()
+        self.v_record = neuron.h.Vector()
+        self.v_record.record(self.cell.soma(0.5)._ref_v)
+        self.ap_counter = neuron.h.APCount(self.cell.soma(0.5))
+        self.t_record = neuron.h.Vector()
+        self.t_record.record(neuron.h._ref_t)
+        self.spikes = neuron.h.Vector()
+        self.ap_counter.record(neuron.h.ref(self.spikes))
+        self.num_spikes_last = 0
+
+
+class ExpSyn(object):
+    """
+    Conductance-based synapses.
+    There are two types, excitatory and inhibitory,
+    with different reversal potentials.
+    If the synaptic weight is above zero, initialize an excitatory synapse,
+    else initialize an inhibitory syanpse with abs(weight).
+    """
+
+    def __init__(self, sec, weight, tau, e_exc=0.0, e_inh=-80.0):
+        self.tau = tau
+        self.e_exc = e_exc
+        self.e_inh = e_inh
+        self.syn = neuron.h.ExpSyn(sec)
+        self.syn.tau = 1000*self.tau  # no more 2x multiply
+        self.weight = weight
+        if self.weight >= 0.0:
+            self.syn.e = self.e_exc
+        else:
+            self.syn.e = self.e_inh
+        # time of spike arrival assigned in nengo step
+        self.spike_in = neuron.h.NetCon(None, self.syn)
+        self.spike_in.weight[0] = abs(self.weight)
 
 
 class SimBahlNeuron(Operator):

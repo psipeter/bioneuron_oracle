@@ -1,9 +1,13 @@
+import numpy as np
+
 from nengo import Connection as NengoConnection
-from nengo.solvers import LstsqL2
 from nengo.connection import ConnectionFunctionParam, TransformParam
 from nengo.params import (Default, Unconfigurable, ObsoleteParam,
                           BoolParam, FunctionParam)
-import numpy as np
+from nengo.solvers import LstsqL2
+
+__all__ = ['BioConnection']
+
 
 class BioConnection(NengoConnection):
 
