@@ -8,6 +8,7 @@ to compute decoders for bioneurons
 
 from .bahl_neuron import *  # loads NEURON model
 from .bio_connection import *
+from .bio_simulator import *
 from .builder import *  # executes Builder.register methods
 from .monkeypatch import *
 from .signals import *

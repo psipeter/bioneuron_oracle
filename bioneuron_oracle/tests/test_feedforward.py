@@ -5,8 +5,7 @@ import numpy as np
 import nengo
 from nengo.utils.matplotlib import rasterplot
 
-from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.signals import prime_sinusoids, step_input
+from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input
 
 pre_neurons = 50
 bio_neurons = 20

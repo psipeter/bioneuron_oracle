@@ -5,9 +5,7 @@ import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
 
-from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.signals import prime_sinusoids, step_input
-from bioneuron_oracle.solver import BioSolver
+from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, BioSolver
 
 
 @lru_cache(maxsize=None)

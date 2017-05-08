@@ -1,9 +1,6 @@
 import nengo
 
-from bioneuron_oracle import patch, unpatch
-
-from bioneuron_oracle.bio_connection import BioConnection
-from bioneuron_oracle.bio_simulator import BioSimulator
+from bioneuron_oracle import patch, unpatch, BioConnection, BioSimulator
 from bioneuron_oracle.monkeypatch import NengoConnection
 from bioneuron_oracle.monkeypatch import NengoSimulator
 

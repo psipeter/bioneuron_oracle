@@ -5,7 +5,7 @@ import neuron
 
 import nengo
 
-from bioneuron_oracle.bahl_neuron import BahlNeuron
+from bioneuron_oracle import BahlNeuron
 
 
 def test_synapse_g(plt):

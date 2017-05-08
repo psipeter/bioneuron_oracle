@@ -5,9 +5,7 @@ from nengo.utils.numpy import rmse
 
 from nengolib.signal import s
 
-from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.signals import prime_sinusoids, equalpower
-from bioneuron_oracle.solver import BioSolver
+from bioneuron_oracle import BahlNeuron, prime_sinusoids, equalpower, BioSolver
 
 
 def test_integrator(plt):
