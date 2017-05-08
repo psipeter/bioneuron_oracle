@@ -288,8 +288,9 @@ def gen_encoders_gains(n_neurons, dimensions, seed):
     Alternative to gain_bias() for bioneurons.
     Called in custom build_connections().
     TODO: add max_rates and other scaling properties.
+    TODO: this function seems unnecessary
     """
-    with nengo.Network() as pre_model:
+    with nengo.Network(add_to_container=False) as pre_model:
         lif = nengo.Ensemble(n_neurons=n_neurons, dimensions=dimensions,
                              neuron_type=nengo.LIF(), seed=seed)
     with nengo.Simulator(pre_model) as pre_sim:
@@ -299,15 +300,14 @@ def gen_encoders_gains(n_neurons, dimensions, seed):
 
 
 def gen_weights_bias(pre_neurons, n_neurons, in_dim,
-                     out_dim, pre_seed, bio_seed):
-
+                     out_dim, pre_seed, bio_seed,
+                     solver=nengo.solvers.LstsqL2(reg=0.01)):
     """
     Build a pre-simulation network to draw biases from Nengo,
     then return a weight matrix that emulates the bias
     (by adding weights to the synaptic weights in init_connection().
     """
-
-    with nengo.Network(label='preliminary') as pre_model:
+    with nengo.Network(add_to_container=False) as pre_model:
         pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=in_dim,
                              seed=pre_seed)
         lif = nengo.Ensemble(n_neurons=n_neurons, dimensions=out_dim,
@@ -318,8 +318,7 @@ def gen_weights_bias(pre_neurons, n_neurons, in_dim,
         biases = pre_sim.data[lif].bias
     # Desired output function Y -- just repeat "bias" m times
     Y = np.tile(biases, (pre_activities.shape[0], 1))
-    solver = nengo.solvers.LstsqL2(reg=0.01)  # TODO: test other solvers?
-    weights_bias, info = solver(pre_activities, Y)
+    weights_bias, unused_info = solver(pre_activities, Y)
     return weights_bias
 
 
