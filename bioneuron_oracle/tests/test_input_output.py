@@ -23,7 +23,7 @@ signal = 'prime_sinusoids'
 decoders_bio = None
 
 
-def test_transform_in(plt):
+def test_transform_in(Simulator, plt):
     cutoff = 0.3
     transform = -0.5
     with nengo.Network() as model:
@@ -56,7 +56,7 @@ def test_transform_in(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     lpf = nengo.Lowpass(tau_nengo)
@@ -77,7 +77,7 @@ def test_transform_in(plt):
     assert rmse_bio < cutoff
 
 
-def test_two_inputs_two_dims(plt):
+def test_two_inputs_two_dims(Simulator, plt):
     """
     Simulate a network [stim1]-[LIF1]-[BIO][0]
                        [stim2]-[LIF2]-[BIO][1]
@@ -115,7 +115,7 @@ def test_two_inputs_two_dims(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     lpf = nengo.Lowpass(tau_nengo)
@@ -136,7 +136,7 @@ def test_two_inputs_two_dims(plt):
     assert rmse_bio < cutoff
 
 
-def test_two_inputs_one_dim(plt):
+def test_two_inputs_one_dim(Simulator, plt):
     """
     Simulate a network [stim1]-[LIF1]-[BIO][0]
                        [stim2]-[LIF2]-[BIO][0]
@@ -174,7 +174,7 @@ def test_two_inputs_one_dim(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     lpf = nengo.Lowpass(tau_nengo)
@@ -195,7 +195,7 @@ def test_two_inputs_one_dim(plt):
     assert rmse_bio < cutoff
 
 
-def test_slice_in(plt):
+def test_slice_in(Simulator, plt):
     """
     Simulate a network [stim1]-[LIF1]-[BIO][0]
                        [stim2]-[LIF2]-[BIO][1]
@@ -233,7 +233,7 @@ def test_slice_in(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     lpf = nengo.Lowpass(tau_nengo)
@@ -261,7 +261,7 @@ def test_slice_in(plt):
     assert rmse_bio_2 < cutoff
 
 
-def test_slice_in_2(plt):
+def test_slice_in_2(Simulator, plt):
     """
     Simulate a network [stim1]-[LIF1][0]-[BIO][0]
 
@@ -292,7 +292,7 @@ def test_slice_in_2(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     lpf = nengo.Lowpass(tau_nengo)
@@ -314,7 +314,7 @@ def test_slice_in_2(plt):
     assert rmse_bio < cutoff
 
 
-def test_slice_out(plt):
+def test_slice_out(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[LIF1]
                                          -[LIF2]
@@ -376,7 +376,7 @@ def test_slice_out(plt):
             probe_lif2 = nengo.Probe(lif2, synapse=tau_nengo)
             probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -417,7 +417,7 @@ def test_slice_out(plt):
     assert rmse_lif2 < cutoff
 
 
-def test_transform_out(plt):
+def test_transform_out(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-(transform)-[BIO2]
                              -[Direct]-(transform)-[Direct_Out]
@@ -469,7 +469,7 @@ def test_transform_out(plt):
             probe_direct = nengo.Probe(direct, synapse=tau_nengo)
             probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
 
-        with nengo.Simulator(model, dt=dt_nengo, seed=1) as sim:
+        with Simulator(model, dt=dt_nengo, seed=1) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -504,7 +504,7 @@ def test_transform_out(plt):
     assert rmse_lif < cutoff
 
 
-def test_bio_to_bio(plt):
+def test_bio_to_bio(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[BIO2]
                              -[Direct]-[Direct_Out]
@@ -558,7 +558,7 @@ def test_bio_to_bio(plt):
             probe_direct = nengo.Probe(direct, synapse=tau_nengo)
             probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -601,7 +601,7 @@ def test_bio_to_bio(plt):
     assert rmse_bio2 < cutoff
 
 
-def test_bio_to_bio_transform(plt):
+def test_bio_to_bio_transform(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[BIO2]
                              -[Direct]-[Direct_Out]
@@ -658,7 +658,7 @@ def test_bio_to_bio_transform(plt):
             probe_direct = nengo.Probe(direct, synapse=tau_nengo)
             probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)

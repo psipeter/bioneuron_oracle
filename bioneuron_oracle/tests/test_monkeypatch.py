@@ -6,7 +6,9 @@ from bioneuron_oracle.monkeypatch import NengoConnection
 from bioneuron_oracle.monkeypatch import NengoSimulator
 
 
-def test_monkeypatching():
+def test_monkeypatching(Simulator):
+    assert Simulator is BioSimulator
+
     assert BioConnection is not NengoConnection
     assert BioSimulator is not NengoSimulator
 

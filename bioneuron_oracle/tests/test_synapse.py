@@ -8,7 +8,7 @@ import nengo
 from bioneuron_oracle import BahlNeuron
 
 
-def test_synapse_g(plt):
+def test_synapse_g(Simulator, plt):
     """
     Run the model for t_transient so that
     bioneuron voltage settles to equilibrium
@@ -76,7 +76,7 @@ def test_synapse_g(plt):
 
         probe_pre_spikes = nengo.Probe(pre.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
+    with Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
         # NOTE: syn.get_loc() does not contain section information
         bioneuron_small = sim.data[bio_small.neurons][0]
         bioneuron_small.v_syn_record = neuron.h.Vector()
@@ -152,7 +152,7 @@ def test_synapse_g(plt):
     assert True  # always passes, just for testing NEURON compatibility
 
 
-def test_synapse_tau(plt):
+def test_synapse_tau(Simulator, plt):
     """
     Run the model for t_transient so that
     bioneuron voltage settles to equilibrium
@@ -224,7 +224,7 @@ def test_synapse_tau(plt):
         probe_lif_medium_voltage = nengo.Probe(lif_medium.neurons, 'voltage')
         probe_lif_large_voltage = nengo.Probe(lif_large.neurons, 'voltage')
 
-    with nengo.Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
+    with Simulator(model, dt=dt_nengo, seed=nengo_seeds) as sim:
         # NOTE: syn.get_loc() does not contain section information
         bioneuron_small = sim.data[bio_small.neurons][0]
         bioneuron_small.v_syn_record = neuron.h.Vector()

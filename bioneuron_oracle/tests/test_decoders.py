@@ -9,7 +9,7 @@ from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, BioSolver
 
 
 @lru_cache(maxsize=None)
-def sim_feedforward():
+def sim_feedforward(Simulator):
     pre_neurons = 100
     bio_neurons = 20
     tau_nengo = 0.01
@@ -47,7 +47,7 @@ def sim_feedforward():
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     # Generate decoders and a basic decoding for comparison
@@ -62,7 +62,7 @@ def sim_feedforward():
     return decoders_bio_old, xhat_bio_old, rmse_bio_old
 
 
-def test_new_LIF_old_decoders(plt):
+def test_new_LIF_old_decoders(Simulator, plt):
     """
     Change the LIF input (seed) but decode with original decoders
     This tests the generalizability of decoders for novel bio activities
@@ -84,7 +84,7 @@ def test_new_LIF_old_decoders(plt):
     pre_seed = 9
     cutoff_mixed = 0.3
     cutoff_compare = 0.3
-    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward()
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward(Simulator)
 
     with nengo.Network() as model:
         """
@@ -111,7 +111,7 @@ def test_new_LIF_old_decoders(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     # Generate a new decoding using the old decoders and new activities
@@ -144,7 +144,7 @@ def test_new_LIF_old_decoders(plt):
     assert rmse_bio_compare < cutoff_compare
 
 
-def test_new_signal_old_decoders(plt):
+def test_new_signal_old_decoders(Simulator, plt):
     """
     Change the and the signal type (step_input) but decode with original
     decoders. This tests the generalizability of decoders for novel
@@ -167,7 +167,7 @@ def test_new_signal_old_decoders(plt):
     signal = 'step_input'
     cutoff_mixed = 0.5
     cutoff_compare = 0.5
-    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward()
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward(Simulator)
 
     with nengo.Network() as model:
         """
@@ -194,7 +194,7 @@ def test_new_signal_old_decoders(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     # Generate a new decoding using the old decoders and new activities
@@ -225,7 +225,7 @@ def test_new_signal_old_decoders(plt):
     assert rmse_bio_compare < cutoff_compare
 
 
-def test_new_LIF_new_signal_old_decoders(plt):
+def test_new_LIF_new_signal_old_decoders(Simulator, plt):
     """
     Change the LIF input (seed) and the signal type (step_input)
     but decode with original decoders
@@ -249,7 +249,7 @@ def test_new_LIF_new_signal_old_decoders(plt):
     signal = 'step_input'
     cutoff_mixed = 0.5
     cutoff_compare = 0.5
-    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward()
+    decoders_bio_old, xhat_bio_old, rmse_bio_old = sim_feedforward(Simulator)
 
     with nengo.Network() as model:
         """
@@ -276,7 +276,7 @@ def test_new_LIF_new_signal_old_decoders(plt):
         probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 
-    with nengo.Simulator(model, dt=dt_nengo) as sim:
+    with Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
     # Generate a new decoding using the old decoders and new activities
@@ -307,7 +307,7 @@ def test_new_LIF_new_signal_old_decoders(plt):
     assert rmse_bio_compare < cutoff_compare
 
 
-def test_biosolver(plt):
+def test_biosolver(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[Probe]
                              -[Direct]
@@ -355,7 +355,7 @@ def test_biosolver(plt):
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_direct = nengo.Probe(direct, synapse=tau_nengo)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)

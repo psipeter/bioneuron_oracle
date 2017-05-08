@@ -8,7 +8,7 @@ from nengolib.signal import s
 from bioneuron_oracle import BahlNeuron, prime_sinusoids, equalpower, BioSolver
 
 
-def test_integrator(plt):
+def test_integrator(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[BIO]
                                    -[LIF]-[LIF]
@@ -91,7 +91,7 @@ def test_integrator(plt):
             probe_compare_spikes = nengo.Probe(compare.neurons, 'spikes')
             probe_integral = nengo.Probe(integral, synapse=None)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)
@@ -130,8 +130,7 @@ def test_integrator(plt):
     assert rmse_bio < cutoff
 
 
-def test_pre_switch(plt):
-
+def test_pre_switch(Simulator, plt):
     """
     simulate the same network as above, but change the LIF ensembles
     (LIF and pre) to have different seeds / rates between training and testing.
@@ -211,7 +210,7 @@ def test_pre_switch(plt):
             probe_compare_spikes = nengo.Probe(compare.neurons, 'spikes')
             probe_integral = nengo.Probe(integral, synapse=None)
 
-        with nengo.Simulator(model, dt=dt_nengo) as sim:
+        with Simulator(model, dt=dt_nengo) as sim:
             sim.run(t_final)
 
         lpf = nengo.Lowpass(tau_nengo)

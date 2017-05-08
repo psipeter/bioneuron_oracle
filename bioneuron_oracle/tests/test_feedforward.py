@@ -57,14 +57,14 @@ with nengo.Network() as model:
 
 
 @lru_cache(maxsize=None)
-def sim_feedforward():
-    sim = nengo.Simulator(model, dt=dt_nengo)
+def sim_feedforward(Simulator):
+    sim = Simulator(model, dt=dt_nengo)
     with sim:
         sim.run(t_final)
     return sim
 
 
-def test_feedforward_connection(plt):
+def test_feedforward_connection(Simulator, plt):
     """
     spike raster for PRE, BIO and comparison LIF ensembles
     test passes if:
@@ -72,7 +72,7 @@ def test_feedforward_connection(plt):
         - this number should be within $cutoff$ %%
           of the number of active LIFs
     """
-    sim = sim_feedforward()
+    sim = sim_feedforward(Simulator)
     plt.subplot(3, 1, 1)
     rasterplot(sim.trange(), sim.data[probe_pre_spikes], use_eventplot=True)
     plt.ylabel('PRE')
@@ -96,7 +96,7 @@ def test_feedforward_connection(plt):
     assert n_bio < (1 + cutoff) * n_lif
 
 
-def test_voltage(plt):
+def test_voltage(Simulator, plt):
     """
     test passes if:
         - a neuron spends less than $cutoff_sat$ %% of time
@@ -106,7 +106,7 @@ def test_voltage(plt):
           which would indicate that synaptic inputs are understimulating
           (or not being delivered)
     """
-    sim = sim_feedforward()
+    sim = sim_feedforward(Simulator)
     cutoff_sat = 0.3
     cutoff_eq = 0.5
     for bioneuron in sim.data[bio.neurons]:
@@ -128,13 +128,13 @@ def test_voltage(plt):
         assert f_eq < cutoff_eq
 
 
-def test_feedforward_decode(plt):
+def test_feedforward_decode(Simulator, plt):
     """
     decoded output of bioensemble
     test passes if:
         - rmse_bio is within $cutoff$ %% of rmse_lif
     """
-    sim = sim_feedforward()
+    sim = sim_feedforward(Simulator)
     cutoff = 0.5
     plt.subplot(1, 1, 1)
     lpf = nengo.Lowpass(tau_nengo)
