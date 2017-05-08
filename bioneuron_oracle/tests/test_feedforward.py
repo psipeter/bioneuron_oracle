@@ -63,7 +63,6 @@ def sim_feedforward():
     with sim:
         sim.run(t_final)
     return sim
-    # TODO: call NEURON garbage collection
 
 
 def test_feedforward_connection(plt):

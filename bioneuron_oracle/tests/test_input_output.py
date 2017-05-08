@@ -238,8 +238,6 @@ def test_slice_in(plt):
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
-    # TODO: call NEURON garbage collection
-
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
     assert np.sum(act_bio) > 0.0
@@ -298,8 +296,6 @@ def test_slice_in_2(plt):
 
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
-
-    # TODO: call NEURON garbage collection
 
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)

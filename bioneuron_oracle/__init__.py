@@ -12,5 +12,4 @@ from .builder import *  # executes Builder.register methods
 from .monkeypatch import *
 from .signals import *
 
-patch_connections()  # nengo.Connection <-> BioConnection
-
+patch()  # nengo.Connection <-> BioConnection, Simulator cleanup

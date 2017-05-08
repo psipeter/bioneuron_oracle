@@ -34,9 +34,7 @@ class BahlNeuron(NeuronType):
         If they're different, the neuron has spiked.
         """
         neuron.run(time*1000)
-        for i, nrn in enumerate(neurons):
-            count = len(nrn.spikes) - nrn.num_spikes_last
-            nrn.num_spikes_last = len(nrn.spikes)
-            volt = np.asarray(nrn.v_record)[-1]  # first call neuron.init()
+        for i, bahl in enumerate(neurons):
+            count, volt = bahl.update()
             spiked[i] = count / dt
             voltage[i] = volt

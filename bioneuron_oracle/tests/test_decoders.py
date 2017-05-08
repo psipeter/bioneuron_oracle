@@ -52,8 +52,6 @@ def sim_feedforward():
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
-    # TODO: call NEURON garbage collection
-
     # Generate decoders and a basic decoding for comparison
     lpf = nengo.Lowpass(tau_nengo)
     solver = nengo.solvers.LstsqL2(reg=0.01)
@@ -117,8 +115,6 @@ def test_new_LIF_old_decoders(plt):
 
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
-
-    # TODO: call NEURON garbage collection
 
     # Generate a new decoding using the old decoders and new activities
     lpf = nengo.Lowpass(tau_nengo)
@@ -203,8 +199,6 @@ def test_new_signal_old_decoders(plt):
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
 
-    # TODO: call NEURON garbage collection
-
     # Generate a new decoding using the old decoders and new activities
     lpf = nengo.Lowpass(tau_nengo)
     solver = nengo.solvers.LstsqL2(reg=0.01)
@@ -286,8 +280,6 @@ def test_new_LIF_new_signal_old_decoders(plt):
 
     with nengo.Simulator(model, dt=dt_nengo) as sim:
         sim.run(t_final)
-
-    # TODO: call NEURON garbage collection
 
     # Generate a new decoding using the old decoders and new activities
     lpf = nengo.Lowpass(tau_nengo)

@@ -17,6 +17,8 @@ __all__ = []
 
 
 class Bahl(object):
+    """Adaptor between step_math and NEURON."""
+
     def __init__(self):
         super(Bahl, self).__init__()
         self.synapses = {}
@@ -29,6 +31,22 @@ class Bahl(object):
         self.spikes = neuron.h.Vector()
         self.ap_counter.record(neuron.h.ref(self.spikes))
         self.num_spikes_last = 0
+        self._clean = False
+
+    def update(self):
+        if self._clean:
+            raise RuntimeError("cannot update() after cleanup()")
+        count = len(self.spikes) - self.num_spikes_last
+        self.num_spikes_last = len(self.spikes)
+        return count, np.asarray(self.v_record)[-1]
+
+    def cleanup(self):
+        if self._clean:
+            raise RuntimeError("cleanup() may only be called once")
+        self.v_record.play_remove()
+        self.t_record.play_remove()
+        self.spikes.play_remove()
+        self._clean = True
 
 
 class ExpSyn(object):
@@ -224,8 +242,8 @@ def build_connection(model, conn):
                              % (syn_loc.shape[:-1], weights_bias))
 
         neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
-        for j, bioneuron in enumerate(neurons):
-            assert isinstance(bioneuron, Bahl)
+        for j, bahl in enumerate(neurons):
+            assert isinstance(bahl, Bahl)
             d_in = weights.T
             loc = syn_loc[j]
             if conn.weights_bias_conn:
@@ -233,18 +251,18 @@ def build_connection(model, conn):
             tau = conn.synapse.tau
             encoder = conn_post.encoders[j]
             gain = conn_post.gain[j]
-            bioneuron.synapses[conn_pre] = np.empty(
+            bahl.synapses[conn_pre] = np.empty(
                 (loc.shape[0], loc.shape[1]), dtype=object)
             for pre in range(loc.shape[0]):
                 for syn in range(loc.shape[1]):
-                    section = bioneuron.cell.apical(loc[pre, syn])
+                    section = bahl.cell.apical(loc[pre, syn])
                     w_ij = np.dot(d_in[pre], gain * encoder)
                     if conn.weights_bias_conn:
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # TODO: better n_syn scaling
                     syn_weights[j, pre, syn] = w_ij
                     synapse = ExpSyn(section, w_ij, tau)
-                    bioneuron.synapses[conn_pre][pre][syn] = synapse
+                    bahl.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
 
         model.add_op(TransmitSpikes(
