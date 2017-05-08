@@ -2,6 +2,8 @@ import numpy as np
 
 from nengo.solvers import Solver
 
+__all__ = ['BioSolver']
+
 
 class BioSolver(Solver):
     """Wraps decoders coming from bioneuron ensembles."""
