@@ -151,6 +151,7 @@ class TransmitSpikes(Operator):
 def build_bahlneuron(model, neuron_type, neurons):
     ens = neurons.ensemble
     bahl_neurons = [Bahl() for _ in range(ens.n_neurons)]
+    neuron.init()
 
     model.sig[neurons]['voltage'] = Signal(
         np.zeros(ens.n_neurons),
@@ -170,7 +171,6 @@ def build_bahlneuron(model, neuron_type, neurons):
         ens.encoders = encoders
         ens.gain = gains
     model.add_op(op)
-    neuron.init()
 
     assert neurons not in model.params
     model.params[neurons] = bahl_neurons
