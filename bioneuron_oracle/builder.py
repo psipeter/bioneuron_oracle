@@ -5,13 +5,13 @@ import neuron
 import nengo
 from nengo.base import ObjView
 from nengo.builder import Builder, Operator, Signal
-from nengo.builder.operator import Copy, DotInc, Reset
-from nengo.builder.connection import (build_decoders, BuiltConnection)
+from nengo.builder.connection import build_decoders, BuiltConnection
 from nengo.builder.ensemble import get_activities
 from nengo.exceptions import BuildError
 from nengo.utils.builder import full_transform
 
 from bioneuron_oracle.bahl_neuron import BahlNeuron
+from bioneuron_oracle.solver import BioSolver
 
 __all__ = []
 
@@ -193,6 +193,12 @@ def build_connection(model, conn):
     conn_pre = deref_objview(conn.pre)
     conn_post = deref_objview(conn.post)
 
+    if isinstance(conn_pre, nengo.Ensemble) and \
+       isinstance(conn_pre.neuron_type, BahlNeuron):
+        if not isinstance(conn.solver, BioSolver):
+            raise BuildError("Connections from bioneurons must provide "
+                             "a BioSolver (got %s)" % conn.solver)
+
     if isinstance(conn_post, nengo.Ensemble) and \
        isinstance(conn_post.neuron_type, BahlNeuron):
         # conn_pre must output spikes to connect to bioneurons
@@ -235,7 +241,7 @@ def build_connection(model, conn):
             model, conn, rng, transform)
 
         # unit test that synapse and weight arrays are compatible shapes
-        # todo: more tests?
+        # TODO: more tests?
         if (conn.weights_bias_conn and
                 not syn_loc.shape[:-1] == weights_bias.T.shape):
             raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
@@ -272,81 +278,6 @@ def build_connection(model, conn):
                                              solver_info=solver_info,
                                              transform=transform,
                                              weights=syn_weights)
-
-    elif (isinstance(conn_pre, nengo.Ensemble) and
-          isinstance(conn_pre.neuron_type, BahlNeuron)):
-        # TODO: this is redundant with nengo's build_connection() except
-        # for one line change, which may break things down the road,
-        # but it was the only way I could get transforms and slilces
-        # out of bioneurons to work
-        rng = np.random.RandomState(model.seeds[conn])
-
-        # Get input and output connections from pre and post
-        def get_prepost_signal(is_pre):
-            target = conn.pre_obj if is_pre else conn.post_obj
-            key = 'out' if is_pre else 'in'
-
-            if target not in model.sig:
-                raise BuildError("Building %s: the %r object %s is not in the "
-                                 "model, or has a size of zero."
-                                 % (conn, 'pre' if is_pre else 'post', target))
-            if key not in model.sig[target]:
-                raise BuildError(
-                    "Building %s: the %r object %s has a %r size of zero."
-                    % (conn, 'pre' if is_pre else 'post', target, key))
-
-            return model.sig[target][key]
-
-        model.sig[conn]['in'] = get_prepost_signal(is_pre=True)
-        model.sig[conn]['out'] = get_prepost_signal(is_pre=False)
-
-        weights = None
-        eval_points = None
-        solver_info = None
-        signal_size = conn.size_out
-        post_slice = conn.post_slice
-        transform = full_transform(conn, slice_pre=False)
-
-        # Figure out the signal going across this connection
-        in_signal = model.sig[conn]['in']
-        eval_points, weights, solver_info = build_decoders(
-            model, conn, rng, transform)
-        if conn.solver.weights:
-            model.sig[conn]['out'] = model.sig[conn.post_obj.neurons]['in']
-            signal_size = conn.post_obj.neurons.size_in
-            post_slice = None  # don't apply slice later
-
-        # Add operator for applying weights
-        model.sig[conn]['weights'] = Signal(
-            weights, name="%s.weights" % conn, readonly=True)
-        signal = Signal(np.zeros(signal_size), name="%s.weighted" % conn)
-        model.add_op(Reset(signal))
-
-        """ElementwiseInc breaks transforms out of bioensembles"""
-        # op = ElementwiseInc if weights.ndim < 2 else DotInc
-        op = DotInc
-
-        model.add_op(op(model.sig[conn]['weights'],
-                        in_signal,
-                        signal,
-                        tag="%s.weights_elementwiseinc" % conn))
-
-        # Add operator for filtering
-        if conn.synapse is not None:
-            signal = model.build(conn.synapse, signal)
-
-        # Store the weighted-filtered output in case we want to probe it
-        model.sig[conn]['weighted'] = signal
-
-        # Copy to the proper slice
-        model.add_op(Copy(
-            signal, model.sig[conn]['out'], dst_slice=post_slice,
-            inc=True, tag="%s" % conn))
-
-        model.params[conn] = BuiltConnection(eval_points=eval_points,
-                                             solver_info=solver_info,
-                                             transform=transform,
-                                             weights=weights)
 
     else:  # normal connection
         return nengo.builder.connection.build_connection(model, conn)
@@ -387,7 +318,7 @@ def gen_weights_bias(pre_neurons, n_neurons, in_dim,
         biases = pre_sim.data[lif].bias
     # Desired output function Y -- just repeat "bias" m times
     Y = np.tile(biases, (pre_activities.shape[0], 1))
-    solver = nengo.solvers.LstsqL2(reg=0.01)  # todo: test other solvers?
+    solver = nengo.solvers.LstsqL2(reg=0.01)  # TODO: test other solvers?
     weights_bias, info = solver(pre_activities, Y)
     return weights_bias
 
@@ -395,7 +326,7 @@ def gen_weights_bias(pre_neurons, n_neurons, in_dim,
 def get_synaptic_locations(rng, pre_neurons, n_neurons,
                            syn_sec, n_syn, seed):
     """Choose one:"""
-    # todo: make syn_distribution an optional parameters of nengo.Connection
+    # TODO: make syn_distribution an optional parameters of nengo.Connection
     # same locations per connection and per bioneuron
 #     rng2=np.random.RandomState(seed=333)
 #     syn_locations=np.array([rng2.uniform(0,1,size=(pre_neurons,n_syn))

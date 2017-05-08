@@ -1,17 +1,17 @@
-from nengo.exceptions import ValidationError
+import numpy as np
+
 from nengo.solvers import Solver
 
 
 class BioSolver(Solver):
+    """Wraps decoders coming from bioneuron ensembles."""
 
-    def __init__(self, decoders_bio=None):
+    def __init__(self, decoders_bio):
+        decoders_bio = np.asarray(decoders_bio)
+        if decoders_bio.ndim <= 1:
+            decoders_bio = decoders_bio[:, None]
         self.decoders_bio = decoders_bio
         super(BioSolver, self).__init__()
 
     def __call__(self, A, Y, rng=None, E=None):
-        if self.decoders_bio is not None:
-            return self.decoders_bio, {}
-        else:
-            raise ValidationError(
-                "decoders_bio not set in model definition",
-                self.decoders_bio)
+        return self.decoders_bio, {}
