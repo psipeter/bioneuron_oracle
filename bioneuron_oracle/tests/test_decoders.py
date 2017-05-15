@@ -326,7 +326,7 @@ def test_biosolver(Simulator, plt):
     dim = 2
 
     cutoff = 0.3
-    cutoff_old_vs_new_decoding = 0.2
+    cutoff_old_vs_new_decoding = 0.3
 
     def sim(w_train, decoders_bio=None, plots=False):
 

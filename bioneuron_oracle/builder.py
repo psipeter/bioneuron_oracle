@@ -255,14 +255,26 @@ def build_connection(model, conn):
             if conn.weights_bias_conn:
                 w_bias = weights_bias[:, j]
             tau = conn.synapse.tau
-            encoder = conn_post.encoders[j]
-            gain = conn_post.gain[j]
+            if not conn.synaptic_encoders:
+                encoder = conn_post.encoders[j]
+                gain = conn_post.gain[j]
             bahl.synapses[conn_pre] = np.empty(
                 (loc.shape[0], loc.shape[1]), dtype=object)
             for pre in range(loc.shape[0]):
+                if conn.synaptic_encoders:
+                    seed = conn_post.seed + j + pre
+                    print seed
+                    n_encoders = loc.shape[0] * loc.shape[1]
+                    dim = conn_post.dimensions
+                    syn_encoders, syn_gains = gen_encoders_gains(
+                        n_encoders, dim, seed)
                 for syn in range(loc.shape[1]):
                     section = bahl.cell.apical(loc[pre, syn])
-                    w_ij = np.dot(d_in[pre], gain * encoder)
+                    if conn.synaptic_encoders:
+                        w_ij = np.dot(d_in[pre],
+                            syn_gains[syn] * conn_post.encoders[j])
+                    else:
+                        w_ij = np.dot(d_in[pre], gain * encoder)
                     if conn.weights_bias_conn:
                         w_ij += w_bias[pre]
                     w_ij /= conn.n_syn  # TODO: better n_syn scaling

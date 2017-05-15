@@ -4,9 +4,206 @@ from seaborn import set_palette, color_palette
 import neuron
 
 import nengo
+from nengo.utils.numpy import rmse
 
-from bioneuron_oracle import BahlNeuron
+from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, BioSolver
 
+def test_multiple_synapses(Simulator, plt):
+
+    pre_neurons = 100
+    bio_neurons = 20
+    tau_nengo = 0.01
+    tau_neuron = 0.01
+    dt_nengo = 0.001
+    pre_seed = 3
+    bio_seed = 6
+    t_final = 1.0
+    dim = 2
+    signal = 'prime_sinusoids'
+    cutoff = 0.3
+    n_syn = 10
+
+    with nengo.Network() as model:
+        """
+        Simulate a feedforward network [stim]-[LIF]-[BIO]
+        with unique encoders at each synapse
+        test passes if rmse_bio < cutoff
+        """
+
+        if signal == 'prime_sinusoids':
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+        elif signal == 'step_input':
+            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
+
+        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                             seed=pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                             seed=bio_seed, neuron_type=BahlNeuron())
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                neuron_type=nengo.Direct())
+
+        nengo.Connection(stim, pre, synapse=None)
+        nengo.Connection(pre, bio,
+                         synapse=tau_neuron,
+                         n_syn=n_syn,
+                         weights_bias_conn=True)
+        nengo.Connection(stim, direct,
+                         synapse=tau_nengo)
+
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+
+    with Simulator(model, dt=dt_nengo) as sim:
+        sim.run(t_final)
+
+    lpf = nengo.Lowpass(tau_nengo)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    assert np.sum(act_bio) > 0.0
+    solver = nengo.solvers.LstsqL2(reg=0.1)
+    decoders_bio, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio = np.dot(act_bio, decoders_bio)
+
+    plt.subplot(1, 1, 1)
+    rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
+    plt.xlabel('time (s)')
+    plt.ylabel('$\hat{x}(t)$')
+    plt.title('decode')
+    plt.legend()  # prop={'size':8}
+    assert rmse_bio < cutoff
+
+def test_synaptic_encoders(Simulator, plt):
+
+    pre_neurons = 100
+    bio_neurons = 20
+    tau_nengo = 0.01
+    tau_neuron = 0.01
+    dt_nengo = 0.001
+    pre_seed = 3
+    bio_seed = 6
+    t_final = 1.0
+    dim = 2
+    signal = 'prime_sinusoids'
+    cutoff = 0.3
+    n_syn = 10
+
+    with nengo.Network() as model:
+        """
+        Simulate a feedforward network [stim]-[LIF]-[BIO]
+        with unique encoders at each synapse
+        test passes if rmse_bio < cutoff
+        """
+
+        if signal == 'prime_sinusoids':
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+        elif signal == 'step_input':
+            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
+
+        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                             seed=pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                             seed=bio_seed, neuron_type=BahlNeuron())
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                neuron_type=nengo.Direct())
+
+        nengo.Connection(stim, pre, synapse=None)
+        nengo.Connection(pre, bio,
+                         synapse=tau_neuron,
+                         n_syn=n_syn,
+                         synaptic_encoders=True,
+                         weights_bias_conn=True)
+        nengo.Connection(stim, direct,
+                         synapse=tau_nengo)
+
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+
+    with Simulator(model, dt=dt_nengo) as sim:
+        sim.run(t_final)
+
+    lpf = nengo.Lowpass(tau_nengo)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    assert np.sum(act_bio) > 0.0
+    solver = nengo.solvers.LstsqL2(reg=0.1)
+    decoders_bio, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio = np.dot(act_bio, decoders_bio)
+
+    plt.subplot(1, 1, 1)
+    rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
+    plt.xlabel('time (s)')
+    plt.ylabel('$\hat{x}(t)$')
+    plt.title('decode')
+    plt.legend()  # prop={'size':8}
+    assert rmse_bio < cutoff
+
+def test_synaptic_gains(Simulator, plt):
+
+    pre_neurons = 100
+    bio_neurons = 20
+    tau_nengo = 0.01
+    tau_neuron = 0.01
+    dt_nengo = 0.001
+    pre_seed = 3
+    bio_seed = 6
+    t_final = 1.0
+    dim = 2
+    signal = 'prime_sinusoids'
+    cutoff = 0.3
+    n_syn = 10
+
+    with nengo.Network() as model:
+        """
+        Simulate a feedforward network [stim]-[LIF]-[BIO]
+        with unique encoders at each synapse
+        test passes if rmse_bio < cutoff
+        """
+
+        if signal == 'prime_sinusoids':
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+        elif signal == 'step_input':
+            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
+
+        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                             seed=pre_seed, neuron_type=nengo.LIF())
+        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                             seed=bio_seed, neuron_type=BahlNeuron())
+        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                neuron_type=nengo.Direct())
+
+        nengo.Connection(stim, pre, synapse=None)
+        nengo.Connection(pre, bio,
+                         synapse=tau_neuron,
+                         n_syn=n_syn,
+                         synaptic_gains=True,
+                         weights_bias_conn=True)
+        nengo.Connection(stim, direct,
+                         synapse=tau_nengo)
+
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+
+    with Simulator(model, dt=dt_nengo) as sim:
+        sim.run(t_final)
+
+    lpf = nengo.Lowpass(tau_nengo)
+    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+    assert np.sum(act_bio) > 0.0
+    solver = nengo.solvers.LstsqL2(reg=0.1)
+    decoders_bio, info = solver(act_bio, sim.data[probe_direct])
+    xhat_bio = np.dot(act_bio, decoders_bio)
+
+    plt.subplot(1, 1, 1)
+    rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
+    plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
+    plt.xlabel('time (s)')
+    plt.ylabel('$\hat{x}(t)$')
+    plt.title('decode')
+    plt.legend()  # prop={'size':8}
+    assert rmse_bio < cutoff
 
 def test_synapse_g(Simulator, plt):
     """
