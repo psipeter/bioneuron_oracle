@@ -11,7 +11,8 @@ class BioConnection(NengoConnection):
 
     def __init__(self, pre, post, syn_sec={'apical'}, n_syn=1,
                  weights_bias_conn=False, decoders_bio=None, 
-                 synaptic_encoders=False, synaptic_gains=False, **kwargs):
+                 synaptic_encoders=False, synaptic_gains=False, 
+                 trained_weights=False, **kwargs):
         """
         syn_sec: the section(s) of the NEURON model on which
                     to distribute synapses
@@ -24,5 +25,6 @@ class BioConnection(NengoConnection):
         self.decoders_bio = decoders_bio
         self.synaptic_encoders = synaptic_encoders
         self.synaptic_gains = synaptic_gains
+        self.trained_weights = trained_weights
 
         super(BioConnection, self).__init__(pre, post, **kwargs)

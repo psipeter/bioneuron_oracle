@@ -37,7 +37,7 @@ def sim_feedforward(Simulator):
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                              seed=bio_seed, neuron_type=BahlNeuron())
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct(),)
+                                neuron_type=nengo.Direct())
 
         nengo.Connection(stim, pre, synapse=None)
         nengo.Connection(pre, bio, synapse=tau_neuron,
@@ -102,7 +102,7 @@ def test_new_LIF_old_decoders(Simulator, plt):
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                              seed=bio_seed, neuron_type=BahlNeuron())
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct(),)
+                                neuron_type=nengo.Direct())
 
         nengo.Connection(stim, pre, synapse=None)
         nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
@@ -185,7 +185,7 @@ def test_new_signal_old_decoders(Simulator, plt):
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                              seed=bio_seed, neuron_type=BahlNeuron())
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct(),)
+                                neuron_type=nengo.Direct())
 
         nengo.Connection(stim, pre, synapse=None)
         nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)
@@ -267,7 +267,7 @@ def test_new_LIF_new_signal_old_decoders(Simulator, plt):
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                              seed=bio_seed, neuron_type=BahlNeuron())
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct(),)
+                                neuron_type=nengo.Direct())
 
         nengo.Connection(stim, pre, synapse=None)
         nengo.Connection(pre, bio, synapse=tau_neuron, weights_bias_conn=True)

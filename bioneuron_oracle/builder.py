@@ -241,46 +241,66 @@ def build_connection(model, conn):
             model, conn, rng, transform)
 
         # unit test that synapse and weight arrays are compatible shapes
-        # TODO: more tests?
         if (conn.weights_bias_conn and
                 not syn_loc.shape[:-1] == weights_bias.T.shape):
             raise BuildError("Shape mismatch: syn_loc=%s, weights_bias=%s"
                              % (syn_loc.shape[:-1], weights_bias))
 
+        if conn.trained_weights:
+            weights = solver_info['weights_bio']
+            if (weights.ndim != 3 and
+                weights.shape != (conn_post.n_neurons, conn_pre.n_neurons,
+                                  conn.n_syn, conn_post.dimensions)):
+                raise BuildError("Bad weight matrix shape: expected %s, got %s"
+                                 % ((conn_post.n_neurons, conn_re.n_neurons,
+                                    conn.n_syn), weights.shape))
+
         neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
-        for j, bahl in enumerate(neurons):
-            assert isinstance(bahl, Bahl)
-            d_in = weights.T
-            loc = syn_loc[j]
-            if conn.weights_bias_conn:
-                w_bias = weights_bias[:, j]
-            tau = conn.synapse.tau
-            if not conn.synaptic_encoders:
+        if conn.trained_weights:  # hyperopt trained weights
+            for j, bahl in enumerate(neurons):
+                assert isinstance(bahl, Bahl)
+                loc = syn_loc[j]            
+                tau = conn.synapse.tau
+                bahl.synapses[conn_pre] = np.empty(
+                    (loc.shape[0], loc.shape[1]), dtype=object)
+                for pre in range(loc.shape[0]):
+                    for syn in range(loc.shape[1]):
+                        section = bahl.cell.apical(loc[pre, syn])
+                        w_ij = weights[j, pre, syn] / conn.n_syn  # TODO: better n_syn scaling
+                        syn_weights[j, pre, syn] = w_ij
+                        synapse = ExpSyn(section, w_ij, tau)
+                        bahl.synapses[conn_pre][pre][syn] = synapse
+
+        else:  # oracle weights
+            for j, bahl in enumerate(neurons):
+                assert isinstance(bahl, Bahl)
+                d_in = weights.T
+                loc = syn_loc[j]
+                if conn.weights_bias_conn:
+                    w_bias = weights_bias[:, j]
+                tau = conn.synapse.tau
                 encoder = conn_post.encoders[j]
                 gain = conn_post.gain[j]
-            bahl.synapses[conn_pre] = np.empty(
-                (loc.shape[0], loc.shape[1]), dtype=object)
-            for pre in range(loc.shape[0]):
-                if conn.synaptic_encoders:
-                    seed = conn_post.seed + j + pre
-                    print seed
-                    n_encoders = loc.shape[0] * loc.shape[1]
-                    dim = conn_post.dimensions
-                    syn_encoders, syn_gains = gen_encoders_gains(
-                        n_encoders, dim, seed)
-                for syn in range(loc.shape[1]):
-                    section = bahl.cell.apical(loc[pre, syn])
-                    if conn.synaptic_encoders:
-                        w_ij = np.dot(d_in[pre],
-                            syn_gains[syn] * conn_post.encoders[j])
-                    else:
+                bahl.synapses[conn_pre] = np.empty(
+                    (loc.shape[0], loc.shape[1]), dtype=object)
+                for pre in range(loc.shape[0]):
+                    if conn.synaptic_encoders or conn.synaptic_gains:
+                        seed = conn_post.seed + j + pre
+                        n_syn = loc.shape[0] * loc.shape[1]
+                        dim = conn_post.dimensions
+                        syn_encoders, syn_gains = gen_encoders_gains(n_syn, dim, seed)
+                    for syn in range(loc.shape[1]):
+                        section = bahl.cell.apical(loc[pre, syn])
+                        if conn.synaptic_encoders or conn.synaptic_gains:
+                            encoder = syn_encoders[syn]
+                            gain = syn_gains[syn]
                         w_ij = np.dot(d_in[pre], gain * encoder)
-                    if conn.weights_bias_conn:
-                        w_ij += w_bias[pre]
-                    w_ij /= conn.n_syn  # TODO: better n_syn scaling
-                    syn_weights[j, pre, syn] = w_ij
-                    synapse = ExpSyn(section, w_ij, tau)
-                    bahl.synapses[conn_pre][pre][syn] = synapse
+                        if conn.weights_bias_conn:
+                            w_ij += w_bias[pre]
+                        w_ij /= conn.n_syn  # TODO: better n_syn scaling
+                        syn_weights[j, pre, syn] = w_ij
+                        synapse = ExpSyn(section, w_ij, tau)
+                        bahl.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
 
         model.add_op(TransmitSpikes(
