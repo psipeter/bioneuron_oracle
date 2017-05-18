@@ -170,6 +170,12 @@ def build_bahlneuron(model, neuron_type, neurons):
             ens.n_neurons, ens.dimensions, ens.seed)
         ens.encoders = encoders
         ens.gain = gains
+        ens.bias = np.zeros_like(gains)
+        # Note: setting encoders/gains/biases in this way doesn't really
+        # respect the high-level ordering of the nengo build process.
+        # This can generate hard-to-track problems related to these attributes.
+        # However, setting them like 'neurons' are set below may not be possible
+        # because these attributes are used in more places in the build process.
     model.add_op(op)
 
     assert neurons not in model.params
@@ -248,11 +254,11 @@ def build_connection(model, conn):
 
         if conn.trained_weights:
             weights = solver_info['weights_bio']
-            if (weights.ndim != 3 and
+            if (weights.ndim != 3 or
                 weights.shape != (conn_post.n_neurons, conn_pre.n_neurons,
-                                  conn.n_syn, conn_post.dimensions)):
+                                  conn.n_syn)):
                 raise BuildError("Bad weight matrix shape: expected %s, got %s"
-                                 % ((conn_post.n_neurons, conn_re.n_neurons,
+                                 % ((conn_post.n_neurons, conn_pre.n_neurons,
                                     conn.n_syn), weights.shape))
 
         neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
