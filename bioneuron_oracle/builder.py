@@ -243,8 +243,9 @@ def build_connection(model, conn):
                 conn_post.dimensions, conn_pre.seed, conn_post.seed)
 
         # Grab decoders from this connections BioSolver
+        # TODO: fails for slicing into TrainedSolver
         eval_points, weights, solver_info = build_decoders(
-            model, conn, rng, transform)
+                model, conn, rng, transform)
 
         # unit test that synapse and weight arrays are compatible shapes
         if (conn.weights_bias_conn and
@@ -253,7 +254,7 @@ def build_connection(model, conn):
                              % (syn_loc.shape[:-1], weights_bias))
 
         if conn.trained_weights:
-            weights = solver_info['weights_bio']
+            weights = solver_info['weights_bio']  # TODO: better workaround to grab correctly shaped weights_bio
             if (weights.ndim != 3 or
                 weights.shape != (conn_post.n_neurons, conn_pre.n_neurons,
                                   conn.n_syn)):

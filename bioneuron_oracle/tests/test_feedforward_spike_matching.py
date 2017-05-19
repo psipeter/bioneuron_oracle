@@ -9,20 +9,20 @@ from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
 
 from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, TrainedSolver
-from bioneuron_oracle.tests.spike_match_train import spike_match_train, feedforward
+from bioneuron_oracle.tests.spike_match_train import spike_match_train
 
-
-def test_feedforward_plot_activities(Simulator, plt):
+@lru_cache(maxsize=None)
+def sim_feedforward_spike_matching(Simulator):
     """
-    Plot a_bio(t) for some of the neurons whose input weights have been
-    trained by feedforward()
+    Simulate a feedforward network with bioneurons whose input weights
+    have been trained by with a spike matching approach()
     """
 
     # Nengo Parameters
     pre_neurons = 100
     bio_neurons = 20
-    tau_nengo = 0.05
-    tau_neuron = 0.05
+    tau_nengo = 0.01
+    tau_neuron = 0.01
     dt_nengo = 0.001
     min_rate = 150
     max_rate = 200
@@ -33,16 +33,14 @@ def test_feedforward_plot_activities(Simulator, plt):
     dim = 1
     n_syn = 1
     signal = 'prime_sinusoids'
-    plots = True
-    cutoff = 10.0
 
     # Evolutionary Parameters
     evo_params = {
         'dt_nengo': 0.001,
         'tau_nengo': 0.01,
         'n_processes': 10,
-        'popsize': 50,
-        'generations' : 20,
+        'popsize': 10,
+        'generations' : 2,
         'delta_w' :2e-3,
         'evo_seed' :9,
         'evo_t_final' :1.0,
@@ -66,13 +64,16 @@ def test_feedforward_plot_activities(Simulator, plt):
         pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
                              seed=pre_seed, neuron_type=nengo.LIF())
         bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             seed=bio_seed, neuron_type=BahlNeuron())
-        lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             neuron_type=nengo.LIF(), seed=bio_seed,
+                             seed=bio_seed, neuron_type=BahlNeuron(),
                              max_rates=nengo.dists.Uniform(min_rate, max_rate),
                              intercepts=nengo.dists.Uniform(-1, 1))
+        lif = nengo.Ensemble(n_neurons=bio.n_neurons, dimensions=bio.dimensions,
+                             seed=bio.seed, neuron_type=nengo.LIF(),
+                             max_rates=bio.max_rates, intercepts=bio.intercepts)
         direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
                                 neuron_type=nengo.Direct())
+        temp = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                neuron_type=nengo.Direct()) 
 
         trained_solver = TrainedSolver(
             weights_bio = np.zeros((bio.n_neurons, pre.n_neurons, n_syn)))
@@ -85,148 +86,60 @@ def test_feedforward_plot_activities(Simulator, plt):
                          solver = trained_solver,
                          n_syn=n_syn)
         nengo.Connection(stim, direct, synapse=tau_nengo)
+        conn_ideal_out = nengo.Connection(lif, temp, synapse=tau_nengo,
+                         solver=nengo.solvers.LstsqL2())
 
+        probe_pre = nengo.Probe(pre, synapse=tau_nengo)
+        probe_lif = nengo.Probe(lif)
+        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
         probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
-        network.probe_bio_spikes=probe_bio_spikes  # for passing to training func
-        network.probe_lif_spikes=probe_lif_spikes
-        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
 
     conn_before = {}
     for conn in network.connections:
         if hasattr(conn, 'trained_weights') and conn.trained_weights == True:
             conn_before[conn] = conn.solver.weights_bio
-    network = spike_match_train(network, method="1-N", params=evo_params, plots=True)
+
+    network = spike_match_train(network, method="1-N",
+                                params=evo_params, plots=True)
     
-    with Simulator(network, dt=dt_nengo) as sim:
+    with Simulator(network, dt=dt_nengo, progress_bar=False) as sim:
         sim.run(t_final)
 
     conn_after = {}
     for conn in network.connections:
         if hasattr(conn, 'trained_weights') and conn.trained_weights == True:
             conn_after[conn] = conn.solver.weights_bio
-    for conn in conn_before.iterkeys():
+
+    for conn in conn_before.iterkeys():  # make sure training had some impact
         assert conn_before[conn] is not conn_after[conn]
 
-    lpf = nengo.Lowpass(tau_nengo)
-    act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-    act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
-    rmses_act = np.array([rmse(act_bio[:,i], act_lif[:,i])
-                         for i in range(bio_neurons)])
+    return sim, pre, bio, lif, direct, conn_ideal_out, \
+            probe_pre, probe_lif, probe_direct, \
+            probe_bio_spikes, probe_lif_spikes
 
-    if plots:
-        for i in range(bio_neurons):
-            plt.subplot(1, 1, 1)
-            bioplot = plt.plot(sim.trange(), act_bio[:,i],
-                               label='BIO neuron %s, RMSE = %s'
-                               % (i,rmses_act[i]))
-            lifplot = plt.plot(sim.trange(), act_lif[:,i],
-                               label='LIF neuron %s' % i,
-                               color=bioplot[0].get_color(),
-                               linestyle='--')
-            plt.xlabel('time (s)')
-            plt.ylabel('$a(t)$')
-            # plt.title()
-            plt.legend()
 
-    for rmse_i in rmses_act:
-        assert rmse_i < cutoff
-
-def test_old_feedforward_plot_activities(Simulator, plt):
+def test_feedforward_spike_matching_activities(Simulator, plt):
     """
-    Plot a_bio(t) for some of the neurons whose input weights have been
-    trained by feedforward()
+    Plot a(t) for the trained network
     """
 
-    # Nengo Parameters
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.05
-    tau_neuron = 0.05
+    sim, pre, bio, lif, direct, conn_ideal_out, \
+            probe_pre, probe_lif, probe_direct, \
+            probe_bio_spikes, probe_lif_spikes = \
+        sim_feedforward_spike_matching(Simulator)
+
+    tau_nengo = 0.01
     dt_nengo = 0.001
-    min_rate = 150
-    max_rate = 200
-    pre_seed = 3
-    bio_seed = 6
-    conn_seed = 9
-    t_final = 1.0
-    dim = 1
-    n_syn = 1
-    signal = 'prime_sinusoids'
-    cutoff = 10.0
-
-    # Evolutionary Parameters
-    n_processes = 10
-    popsize = 10
-    generations = 2
-    delta_w = 2e-3
-    evo_seed = 9
-    evo_t_final = 1.0
-    evo_signal = 'prime_sinusoids'
-    # if evo_signal == 'white_noise':
-    evo_max_freq = 5.0
-    evo_signal_seed = 234
-    evo_cutoff = 50.0
-
-    try:  # use saved weights
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-    except:
-        feedforward(
-            Simulator, plt, pre_neurons, bio_neurons, tau_nengo, tau_neuron,
-            dt_nengo, min_rate, max_rate, evo_signal, pre_seed, bio_seed,
-            conn_seed, evo_t_final, dim, n_syn, evo_cutoff, n_processes,
-            popsize, generations, delta_w, evo_seed,
-            plots=True, max_freq=evo_max_freq, signal_seed=evo_signal_seed)
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-
-    with nengo.Network() as model:
-
-        if signal == 'prime_sinusoids':
-            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
-        elif signal == 'step_input':
-            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
-        elif signal == 'white_noise':
-            stim = nengo.Node(lambda t: equalpower(
-                                  t, dt_nengo, t_final, max_freq, dim,
-                                  mean=0.0, std=1.0, seed=signal_seed))
-
-        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                             seed=pre_seed, neuron_type=nengo.LIF())
-        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             seed=bio_seed, neuron_type=BahlNeuron())
-        lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             neuron_type=nengo.LIF(), seed=bio_seed,
-                             max_rates=nengo.dists.Uniform(min_rate, max_rate))
-        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct())
-
-        trained_solver = TrainedSolver(weights_bio = weights_bio)
-        nengo.Connection(stim, pre, synapse=None)
-        nengo.Connection(pre, lif, synapse=tau_nengo)
-        nengo.Connection(pre, bio,
-                         seed=conn_seed,
-                         synapse=tau_neuron,
-                         trained_weights=True,
-                         solver=trained_solver)
-        nengo.Connection(stim, direct, synapse=tau_nengo)
-
-        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
-        probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
-        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
-
-    with Simulator(model, dt=dt_nengo) as sim:
-        sim.run(t_final)
+    cutoff = 30.0
 
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
     act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
     rmses_act = np.array([rmse(act_bio[:,i], act_lif[:,i])
-                         for i in range(bio_neurons)])
+                         for i in range(bio.n_neurons)])
 
-    set_palette(color_palette("deep", 5))
-    for i in range(5):
+    for i in range(bio.n_neurons):
         plt.subplot(1, 1, 1)
         bioplot = plt.plot(sim.trange(), act_bio[:,i],
                            label='BIO neuron %s, RMSE = %s'
@@ -240,108 +153,28 @@ def test_old_feedforward_plot_activities(Simulator, plt):
         # plt.title()
         plt.legend()
 
-    assert True  # just for plotting
+    for rmse_i in rmses_act:
+        assert rmse_i < cutoff
 
-def test_feedforward_plot_tuning_curves(Simulator, plt):
-    """
-    Plot a_bio(t) for some of the neurons whose input weights have been
-    trained by feedforward()
-    """
+def test_feedforward_spike_matching_tuning_curves(Simulator, plt):
 
-    # Nengo Parameters
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.05
-    tau_neuron = 0.05
+    sim, pre, bio, lif, direct, conn_ideal_out, \
+            probe_pre, probe_lif, probe_direct, \
+            probe_bio_spikes, probe_lif_spikes = \
+        sim_feedforward_spike_matching(Simulator)
+
+    tau_nengo = 0.01
     dt_nengo = 0.001
-    min_rate = 150
-    max_rate = 200
-    pre_seed = 3
-    bio_seed = 6
-    conn_seed = 9
-    t_final = 1.0
-    dim = 1
-    n_syn = 1
-    signal = 'prime_sinusoids'
-
-    n_eval_points = 25
-    cutoff = 10.0
-
-    # Evolutionary Parameters
-    n_processes = 10
-    popsize = 20
-    generations = 5
-    delta_w = 2e-3
-    evo_seed = 9
-    evo_t_final = 10.0
-    evo_signal = 'prime_sinusoids'
-    # if evo_signal == 'white_noise':
-    evo_max_freq = 5.0
-    evo_signal_seed = 234
-    evo_cutoff = 50.0
-
-    try:  # use saved weights
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-    except:
-        feedforward(
-            Simulator, plt, pre_neurons, bio_neurons, tau_nengo, tau_neuron,
-            dt_nengo, min_rate, max_rate, evo_signal, pre_seed, bio_seed,
-            conn_seed, evo_t_final, dim, n_syn, evo_cutoff, n_processes,
-            popsize, generations, delta_w, evo_seed,
-            plots=True, max_freq=evo_max_freq, signal_seed=evo_signal_seed)
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-
-    with nengo.Network() as model:
-
-        if signal == 'prime_sinusoids':
-            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
-        elif signal == 'step_input':
-            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
-        elif signal == 'white_noise':
-            stim = nengo.Node(lambda t: equalpower(
-                                  t, dt_nengo, t_final, max_freq, dim,
-                                  mean=0.0, std=1.0, seed=signal_seed))
-
-        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                             seed=pre_seed, neuron_type=nengo.LIF())
-        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             seed=bio_seed, neuron_type=BahlNeuron())
-        lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             neuron_type=nengo.LIF(), seed=bio_seed,
-                             max_rates=nengo.dists.Uniform(min_rate, max_rate))
-        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct())
-
-        trained_solver = TrainedSolver(weights_bio = weights_bio)
-        nengo.Connection(stim, pre, synapse=None)
-        nengo.Connection(pre, lif, synapse=tau_nengo)
-        nengo.Connection(pre, bio,
-                         seed=conn_seed,
-                         synapse=tau_neuron,
-                         trained_weights=True,
-                         solver=trained_solver)
-        nengo.Connection(stim, direct, synapse=tau_nengo)
-
-        probe_pre = nengo.Probe(pre, synapse=tau_nengo)
-        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
-        probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
-        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
-
-    with Simulator(model, dt=dt_nengo) as sim:
-        sim.run(t_final)
+    n_eval_points = 20
+    cutoff = 30.0
 
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
     act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
     rmses_act = np.array([rmse(act_bio[:,i], act_lif[:,i])
-                         for i in range(bio_neurons)])
+                         for i in range(bio.n_neurons)])
 
-    set_palette(color_palette("deep", 5))
-    plt.subplot(1, 1, 1)
-
-    for i in range(5):
+    for i in range(bio.n_neurons):
         x_dot_e_bio = np.dot(sim.data[probe_pre], bio.encoders[i])
         x_dot_e_lif = np.dot(sim.data[probe_pre], sim.data[lif].encoders[i])
         x_dot_e_vals_bio = np.linspace(np.min(x_dot_e_bio),
@@ -380,100 +213,18 @@ def test_feedforward_plot_tuning_curves(Simulator, plt):
     assert True  # just for plotting
 
 
-def test_feedforward_decode_spike_matching(Simulator, plt):
+def test_feedforward_spike_matching_decode(Simulator, plt):
     """
-    decoded output of bioensemble
-    test passes if:
-        - rmse_bio is within $cutoff$ %% of rmse_lif
+    plot xhat_bio(t), xhat_ideal(t), and x(t) from direct
     """
-    # Nengo Parameters
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.05
-    tau_neuron = 0.05
+    tau_nengo = 0.01
     dt_nengo = 0.001
-    min_rate = 150
-    max_rate = 200
-    pre_seed = 3
-    bio_seed = 6
-    conn_seed = 9
-    t_final = 1.0
-    dim = 1
-    n_syn = 1
-    signal = 'prime_sinusoids'
+    cutoff = 0.1
 
-    n_eval_points = 25
-    cutoff = 10.0
-
-    # Evolutionary Parameters
-    n_processes = 10
-    popsize = 20
-    generations = 5
-    delta_w = 2e-3
-    evo_seed = 9
-    evo_t_final = 10.0
-    evo_signal = 'prime_sinusoids'
-    if evo_signal == 'white_noise':
-        evo_max_freq = 5.0
-        evo_signal_seed = 234
-    evo_cutoff = 50.0
-
-    try:  # use saved weights
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-    except:
-        feedforward(
-            Simulator, plt, pre_neurons, bio_neurons, tau_nengo, tau_neuron,
-            dt_nengo, min_rate, max_rate, evo_signal, pre_seed, bio_seed,
-            conn_seed, evo_t_final, dim, n_syn, evo_cutoff, n_processes,
-            popsize, generations, delta_w, evo_seed,
-            plots=True, max_freq=evo_max_freq, signal_seed=evo_signal_seed)
-        weights_bio = np.load('weights/weights_bio_feedforward.npz')
-        weights_bio = weights_bio['weights_bio']
-
-    with nengo.Network() as model:
-
-        if signal == 'prime_sinusoids':
-            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
-        elif signal == 'step_input':
-            stim = nengo.Node(lambda t: step_input(t, dim, t_final, dt_nengo))
-        elif signal == 'white_noise':
-            stim = nengo.Node(lambda t: equalpower(
-                                  t, dt_nengo, t_final, max_freq, dim,
-                                  mean=0.0, std=1.0, seed=signal_seed))
-
-        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                             seed=pre_seed, neuron_type=nengo.LIF())
-        bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             seed=bio_seed, neuron_type=BahlNeuron())
-        lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                             neuron_type=nengo.LIF(), seed=bio_seed,
-                             max_rates=nengo.dists.Uniform(min_rate, max_rate))
-        direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct())
-        temp = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct()) 
-
-        trained_solver = TrainedSolver(weights_bio = weights_bio)
-        nengo.Connection(stim, pre, synapse=None)
-        nengo.Connection(pre, lif, synapse=tau_nengo)
-        nengo.Connection(pre, bio,
-                         seed=conn_seed,
-                         synapse=tau_neuron,
-                         trained_weights=True,
-                         solver=trained_solver)
-        nengo.Connection(stim, direct, synapse=tau_nengo)
-        conn_ideal_out = nengo.Connection(lif, temp, synapse=tau_nengo,
-                         solver=nengo.solvers.LstsqL2())
-
-        probe_pre = nengo.Probe(pre, synapse=tau_nengo)
-        probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
-        probe_lif = nengo.Probe(lif)
-        probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
-        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
-
-    with Simulator(model, dt=dt_nengo) as sim:
-        sim.run(t_final)
+    sim, pre, bio, lif, direct, conn_ideal_out, \
+            probe_pre, probe_lif, probe_direct, \
+            probe_bio_spikes, probe_lif_spikes = \
+        sim_feedforward_spike_matching(Simulator)
 
     plt.subplot(1, 1, 1)
     lpf = nengo.Lowpass(tau_nengo)
@@ -504,4 +255,5 @@ def test_feedforward_decode_spike_matching(Simulator, plt):
     plt.title('decode')
     plt.legend()  # prop={'size':8}
 
-    assert True  # just for plotting
+    assert rmse_bio_oracle < cutoff
+    assert rmse_bio_ideal < cutoff
