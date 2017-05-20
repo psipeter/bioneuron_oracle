@@ -504,6 +504,111 @@ def test_transform_out(Simulator, plt):
     assert rmse_lif < cutoff
 
 
+def test_slice_and_transform_out(Simulator, plt):
+    """
+    Simulate a network [stim]-[LIF]-[BIO]-[LIF1]
+                                         -[LIF2]
+                             -[Direct]-[Direct_out]
+    decoders_bio: decoders out of [BIO] that are trained
+                  by the oracle method (iterative)
+    w_train: soft-mux parameter that governs what fraction of
+             [BIO]-out decoders are computed
+             randomly vs from the oracle method
+    jl_dims: extra dimensions for the oracle training
+             (Johnson-Lindenstrauss lemma)
+    """
+
+    cutoff = 0.3
+    transform = -0.5
+
+    def sim(w_train=1, decoders_bio=None, plots=False):
+
+        if decoders_bio is None:
+            decoders_bio = np.zeros((bio_neurons, dim))
+
+        with nengo.Network() as model:
+
+            stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
+
+            lif = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+                                 seed=pre_seed, neuron_type=nengo.LIF())
+            bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                                 seed=bio_seed, neuron_type=BahlNeuron())
+            direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                    neuron_type=nengo.Direct())
+            lif1 = nengo.Ensemble(n_neurons=post_neurons, dimensions=dim/2,
+                                  seed=post_seed, neuron_type=nengo.LIF())
+            lif2 = nengo.Ensemble(n_neurons=post_neurons, dimensions=dim/2,
+                                  seed=2*post_seed, neuron_type=nengo.LIF())
+            direct_out = nengo.Ensemble(n_neurons=1, dimensions=dim,
+                                        neuron_type=nengo.Direct())
+
+            bio_solver1 = BioSolver(
+                decoders_bio=(1. - w_train) * decoders_bio[:, 0])
+            bio_solver2 = BioSolver(
+                decoders_bio=(1. - w_train) * decoders_bio[:, 1])
+
+            nengo.Connection(stim, lif, synapse=None)
+            nengo.Connection(lif, bio, synapse=tau_neuron,
+                             weights_bias_conn=True)
+            nengo.Connection(bio[0], lif1, synapse=tau_nengo,
+                             solver=bio_solver1, transform=transform)
+            nengo.Connection(bio[1], lif2, synapse=tau_nengo,
+                             solver=bio_solver2, transform=transform)
+            nengo.Connection(lif, direct,
+                             synapse=tau_nengo, transform=transform)
+            nengo.Connection(direct, direct_out, synapse=tau_nengo)
+            # TODO: test output to node, direct, etc
+
+            probe_bio = nengo.Probe(bio[0], synapse=tau_neuron,
+                                    solver=bio_solver1)
+            # TODO: probe out of sliced bioensemble not filtering
+            probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+            probe_lif1 = nengo.Probe(lif1, synapse=tau_nengo)
+            probe_lif2 = nengo.Probe(lif2, synapse=tau_nengo)
+            probe_direct_out = nengo.Probe(direct_out, synapse=tau_nengo)
+
+        with Simulator(model, dt=dt_nengo) as sim:
+            sim.run(t_final)
+
+        lpf = nengo.Lowpass(tau_nengo)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        assert np.sum(act_bio) > 0.0
+        solver = nengo.solvers.LstsqL2(reg=0.1)
+        decoders_bio_new, info = solver(act_bio, sim.data[probe_direct_out])
+        # rmse_bio = rmse(sim.data[probe_bio], sim.data[probe_direct_out][:,0])
+        rmse_lif1 = rmse(sim.data[probe_lif1][:, 0],
+                         sim.data[probe_direct_out][:, 0])
+        rmse_lif2 = rmse(sim.data[probe_lif2][:, 0],
+                         sim.data[probe_direct_out][:, 1])
+
+        if plots:
+            plt.subplot(1, 1, 1)
+            plt.plot(sim.trange(), sim.data[probe_bio],
+                     label='[STIM]-[LIF]-[BIO][0]-[probe]')
+            plt.plot(sim.trange(), sim.data[probe_lif1][:, 0],
+                     label='[STIM]-[LIF]-[BIO]-[LIF1], rmse=%.5f' % rmse_lif1)
+            plt.plot(sim.trange(), sim.data[probe_lif2][:, 0],
+                     label='[STIM]-[LIF]-[BIO]-[LIF2], rmse=%.5f' % rmse_lif2)
+            plt.plot(sim.trange(), sim.data[probe_direct_out][:, 0],
+                     label='[STIM]-[LIF]-[LIF_EQ]-[Direct][0]')
+            plt.plot(sim.trange(), sim.data[probe_direct_out][:, 1],
+                     label='[STIM]-[LIF]-[LIF_EQ]-[Direct][1]')
+            plt.xlabel('time (s)')
+            plt.ylabel('$\hat{x}(t)$')
+            plt.title('decode')
+            plt.legend()  # prop={'size':8}
+
+        return decoders_bio_new, rmse_lif1, rmse_lif2
+
+    decoders_bio_new, _, _ = sim(w_train=1, decoders_bio=None)
+    _, rmse_lif1, rmse_lif2 = sim(w_train=0, decoders_bio=decoders_bio_new,
+                                  plots=True)
+
+    assert rmse_lif1 < cutoff
+    assert rmse_lif2 < cutoff
+
+
 def test_bio_to_bio(Simulator, plt):
     """
     Simulate a network [stim]-[LIF]-[BIO]-[BIO2]

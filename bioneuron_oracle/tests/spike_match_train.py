@@ -162,8 +162,8 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
         for g in range(generations):
             inputs = [[w_pop[p], network, ens, bio_probes, ideal_probes]
                       for p in range(popsize)]
-            fitnesses = np.array([evaluate(inputs[0]), evaluate(inputs[1])])  # debugging
-            # fitnesses = np.array(pool.map(evaluate, inputs))
+            # fitnesses = np.array([evaluate(inputs[0]), evaluate(inputs[1])])  # debugging
+            fitnesses = np.array(pool.map(evaluate, inputs))
 
             # Find the evo individual with the lowest fitness
             # ensemble-by-ensemble training

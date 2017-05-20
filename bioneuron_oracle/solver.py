@@ -16,7 +16,7 @@ class TrainedSolver(Solver):
             				  connections must have ndim=3, got ndim=%s"
                              % weights_bio.ndim)
         self.weights_bio = weights_bio
-        super(TrainedSolver, self).__init__()
+        super(TrainedSolver, self).__init__(weights=True)
 
     def __call__(self, A, Y, rng=None, E=None):
         # return self.weights_bio, {}
