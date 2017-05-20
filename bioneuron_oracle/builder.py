@@ -11,7 +11,7 @@ from nengo.exceptions import BuildError
 from nengo.utils.builder import full_transform
 
 from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.solver import BioSolver
+from bioneuron_oracle.solver import BioSolver, TrainedSolver
 
 __all__ = []
 
@@ -201,7 +201,8 @@ def build_connection(model, conn):
 
     if isinstance(conn_pre, nengo.Ensemble) and \
        isinstance(conn_pre.neuron_type, BahlNeuron):
-        if not isinstance(conn.solver, BioSolver):
+        if (not isinstance(conn.solver, BioSolver) and 
+                not isinstance(conn.solver, TrainedSolver)):
             raise BuildError("Connections from bioneurons must provide "
                              "a BioSolver (got %s)" % conn.solver)
 

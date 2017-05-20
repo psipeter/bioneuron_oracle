@@ -7,18 +7,39 @@ from nengo.utils.numpy import rmse
 
 from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, BioSolver
 
+# Nengo Parameters
+pre_neurons = 100
+bio_neurons = 20
+tau_nengo = 0.01
+tau_neuron = 0.01
+dt_nengo = 0.001
+min_rate = 150
+max_rate = 200
+pre_seed = 3
+bio_seed = 6
+conn_seed = 9
+t_final = 1.0
+dim = 1
+n_syn = 1
+signal = 'prime_sinusoids'
 
 @lru_cache(maxsize=None)
 def sim_feedforward(Simulator):
+
+    # Nengo Parameters
     pre_neurons = 100
     bio_neurons = 20
     tau_nengo = 0.01
     tau_neuron = 0.01
     dt_nengo = 0.001
+    min_rate = 150
+    max_rate = 200
     pre_seed = 3
     bio_seed = 6
+    conn_seed = 9
     t_final = 1.0
-    dim = 2
+    dim = 1
+    n_syn = 1
     signal = 'prime_sinusoids'
 
     with nengo.Network() as model:
@@ -71,15 +92,6 @@ def test_new_LIF_old_decoders(Simulator, plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.01
-    tau_neuron = 0.01
-    dt_nengo = 0.001
-    bio_seed = 6
-    t_final = 1.0
-    dim = 2
-    signal = 'prime_sinusoids'
 
     pre_seed = 9
     cutoff_mixed = 0.3
@@ -154,16 +166,7 @@ def test_new_signal_old_decoders(Simulator, plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.01
-    tau_neuron = 0.01
-    dt_nengo = 0.001
-    t_final = 1.0
-    dim = 2
 
-    pre_seed = 3
-    bio_seed = 6
     signal = 'step_input'
     cutoff_mixed = 0.5
     cutoff_compare = 0.5
@@ -236,14 +239,6 @@ def test_new_LIF_new_signal_old_decoders(Simulator, plt):
         - RMSE (xhat_bio_mixed, xhat_bio_new) < $cutoff$
         - rmse_mixed < cutoff
     """
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.01
-    tau_neuron = 0.01
-    dt_nengo = 0.001
-    bio_seed = 6
-    t_final = 1.0
-    dim = 2
 
     pre_seed = 9
     signal = 'step_input'
@@ -315,16 +310,6 @@ def test_biosolver(Simulator, plt):
                   by the oracle method (iterative)
     """
 
-    pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.01
-    tau_neuron = 0.01
-    dt_nengo = 0.001
-    pre_seed = 3
-    bio_seed = 6
-    t_final = 1.0
-    dim = 2
-
     cutoff = 0.3
     cutoff_old_vs_new_decoding = 0.3
 
@@ -370,11 +355,11 @@ def test_biosolver(Simulator, plt):
         if plots:
             plt.subplot(1, 1, 1)
             plt.plot(sim.trange(), sim.data[probe_bio],
-                     label='[STIM]-[LIF]-[BIO]-[probe]')
+                     label='BIO (probe)')
             plt.plot(sim.trange(), xhat_bio,
-                     label='[STIM]-[LIF]-[BIO], rmse=%.5f' % rmse_bio)
+                     label='BIO (xhat), rmse=%.5f' % rmse_bio)
             plt.plot(sim.trange(), sim.data[probe_direct],
-                     label='[STIM]-[LIF]-[LIF_EQ]-[Direct]')
+                     label='Direct')
             plt.xlabel('time (s)')
             plt.ylabel('$\hat{x}(t)$')
             plt.title('decode')

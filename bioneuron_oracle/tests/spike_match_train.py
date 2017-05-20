@@ -94,14 +94,15 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
         w_original = {}  # original weights
 
         # replace all bioensembles with corresponding LIF ensembles
-        # except for the one that is being trained
+        # except for the one that is being trained (e.g. so that bio1-bio2
+        # gives bio2 some spikes before bio1 is trained)
         ens_changed = {}
         for ens_test in network.ensembles:
             if (isinstance(ens_test.neuron_type, BahlNeuron)
                     and ens_test is not ens):
                 ens_changed[ens_test] = True
                 with network:
-                    ens_test.neuron_type = nengo.LIF()
+                    ens_test = ideal_ens[ens_test]
 
         for conn in network.connections:
             conn_post = deref_objview(conn.post)
@@ -129,7 +130,7 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
         for ens_test in network.ensembles:
             if ens_test in ens_changed:
                 with network:
-                    ens_test.neuron_type = BahlNeuron()  # TODO: untested
+                    ens_test= bio_ens[ens_test]
         for conn in network.connections:
             if conn_post == ens and conn in w_bio_p:
                 conn.solver.weights_bio = w_original[conn]

@@ -20,9 +20,9 @@ def sim_feedforward_spike_matching(Simulator):
 
     # Nengo Parameters
     pre_neurons = 100
-    bio_neurons = 20
-    tau_nengo = 0.01
-    tau_neuron = 0.01
+    bio_neurons = 3
+    tau_nengo = 0.05
+    tau_neuron = 0.05
     dt_nengo = 0.001
     min_rate = 150
     max_rate = 200
@@ -39,9 +39,9 @@ def sim_feedforward_spike_matching(Simulator):
         'dt_nengo': 0.001,
         'tau_nengo': 0.01,
         'n_processes': 10,
-        'popsize': 10,
-        'generations' : 2,
-        'delta_w' :2e-3,
+        'popsize': 50,
+        'generations' :100,
+        'delta_w' :1e-2,
         'evo_seed' :9,
         'evo_t_final' :1.0,
         'evo_signal': 'prime_sinusoids',
