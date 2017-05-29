@@ -8,19 +8,19 @@ import nengo
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
 
-from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, TrainedSolver
-from bioneuron_oracle.tests.spike_match_train import spike_match_train
+from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input,
+	                          TrainedSolver, spike_match_train)
 
 @lru_cache(maxsize=None)
-def sim_feedforward_spike_matching(Simulator):
+def sim_feedforward(Simulator):
     """
     Simulate a feedforward network with bioneurons whose input weights
     have been trained by with a spike matching approach()
     """
 
     # Nengo Parameters
-    pre_neurons = 100
-    bio_neurons = 3
+    pre_neurons = 20
+    bio_neurons = 50
     tau_nengo = 0.05
     tau_neuron = 0.05
     dt_nengo = 0.001
@@ -37,11 +37,12 @@ def sim_feedforward_spike_matching(Simulator):
     # Evolutionary Parameters
     evo_params = {
         'dt_nengo': 0.001,
-        'tau_nengo': 0.01,
+        'tau_nengo': 0.05,
         'n_processes': 10,
-        'popsize': 50,
-        'generations' :100,
-        'delta_w' :1e-2,
+        'popsize': 10,
+        'generations' :200,
+        'w_0': 1e-3,
+        'delta_w' :1e-4,
         'evo_seed' :9,
         'evo_t_final' :1.0,
         'evo_signal': 'prime_sinusoids',
@@ -91,7 +92,7 @@ def sim_feedforward_spike_matching(Simulator):
 
         probe_pre = nengo.Probe(pre, synapse=tau_nengo)
         probe_lif = nengo.Probe(lif)
-        probe_direct = nengo.Probe(direct, synapse=tau_nengo)
+        probe_direct = nengo.Probe(direct, synapse=None)
         probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
         probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 
@@ -119,7 +120,7 @@ def sim_feedforward_spike_matching(Simulator):
             probe_bio_spikes, probe_lif_spikes
 
 
-def test_feedforward_spike_matching_activities(Simulator, plt):
+def test_feedforward_activities(Simulator, plt):
     """
     Plot a(t) for the trained network
     """
@@ -127,11 +128,11 @@ def test_feedforward_spike_matching_activities(Simulator, plt):
     sim, pre, bio, lif, direct, conn_ideal_out, \
             probe_pre, probe_lif, probe_direct, \
             probe_bio_spikes, probe_lif_spikes = \
-        sim_feedforward_spike_matching(Simulator)
+        sim_feedforward(Simulator)
 
     tau_nengo = 0.01
     dt_nengo = 0.001
-    cutoff = 30.0
+    cutoff = 50.0
 
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
@@ -156,17 +157,17 @@ def test_feedforward_spike_matching_activities(Simulator, plt):
     for rmse_i in rmses_act:
         assert rmse_i < cutoff
 
-def test_feedforward_spike_matching_tuning_curves(Simulator, plt):
+def test_feedforward_tuning_curves(Simulator, plt):
 
     sim, pre, bio, lif, direct, conn_ideal_out, \
             probe_pre, probe_lif, probe_direct, \
             probe_bio_spikes, probe_lif_spikes = \
-        sim_feedforward_spike_matching(Simulator)
+        sim_feedforward(Simulator)
 
     tau_nengo = 0.01
     dt_nengo = 0.001
     n_eval_points = 20
-    cutoff = 30.0
+    cutoff = 50.0
 
     lpf = nengo.Lowpass(tau_nengo)
     act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
@@ -210,21 +211,23 @@ def test_feedforward_spike_matching_tuning_curves(Simulator, plt):
     plt.title('Tuning Curves')
     plt.legend()
 
-    assert True  # just for plotting
+    rmse_tuning_curve = rmse(Hz_mean_bio[:-2], Hz_mean_lif[:-2])
+
+    assert rmse_tuning_curve < cutoff
 
 
-def test_feedforward_spike_matching_decode(Simulator, plt):
+def test_feedforward_decode(Simulator, plt):
     """
     plot xhat_bio(t), xhat_ideal(t), and x(t) from direct
     """
     tau_nengo = 0.01
     dt_nengo = 0.001
-    cutoff = 0.1
+    cutoff = 0.2
 
     sim, pre, bio, lif, direct, conn_ideal_out, \
             probe_pre, probe_lif, probe_direct, \
             probe_bio_spikes, probe_lif_spikes = \
-        sim_feedforward_spike_matching(Simulator)
+        sim_feedforward(Simulator)
 
     plt.subplot(1, 1, 1)
     lpf = nengo.Lowpass(tau_nengo)
@@ -249,7 +252,7 @@ def test_feedforward_spike_matching_decode(Simulator, plt):
     # plt.plot(sim.trange(), sim.data[probe_lif],
     plt.plot(sim.trange(), xhat_lif_ideal,
              label='lif, rmse=%.5f' % rmse_lif)
-    plt.plot(sim.trange(), sim.data[probe_direct], label='direct')
+    plt.plot(sim.trange(), sim.data[probe_direct], label='oracle')
     plt.xlabel('time (s)')
     plt.ylabel('$\hat{x}(t)$')
     plt.title('decode')

@@ -6,8 +6,8 @@ from nengo.utils.numpy import rmse
 from nengolib.signal import s
 
 from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input,
-                              equalpower, BioSolver, TrainedSolver)
-from bioneuron_oracle.tests.spike_match_train import spike_match_train
+                              equalpower, OracleSolver, TrainedSolver,
+                              spike_match_train)
 
 # Nengo Parameters
 pre_neurons = 100
@@ -22,8 +22,8 @@ pre_seed = 3
 bio_seed = 6
 post_seed = 12
 conn_seed = 9
-t_final = 0.1
-dim = 1
+t_final = 1.0
+dim = 2
 n_syn = 1
 jl_dims = 0
 signal = 'prime_sinusoids'
@@ -31,13 +31,14 @@ signal = 'prime_sinusoids'
 # Evolutionary Parameters
 evo_params = {
     'dt_nengo': 0.001,
-    'tau_nengo': 0.01,
+    'tau_nengo': 0.05,
     'n_processes': 10,
-    'popsize': 2,
-    'generations' : 2,
-    'delta_w' :2e-3,
+    'popsize': 10,
+    'generations' :2,
+    'w_0': 1e-3,
+    'delta_w' :1e-4,
     'evo_seed' :9,
-    'evo_t_final' :0.1,
+    'evo_t_final' :1.0,
     'evo_signal': 'prime_sinusoids',
     'evo_max_freq': 5.0,
     'evo_signal_seed': 234,
@@ -96,8 +97,8 @@ def test_integrator(Simulator, plt):
             # TODO: magnitude should scale with n_neurons (maybe 1./n^2)?
             jl_decoders = np.random.RandomState(seed=333).randn(
                 bio_neurons, jl_dims) * 1e-4
-            bio_solver.decoders_bio = np.hstack(
-                (bio_solver.decoders_bio, jl_decoders))
+            oracle_solver.decoders_bio = np.hstack(
+                (oracle_solver.decoders_bio, jl_decoders))
 
         nengo.Connection(stim, lif, synapse=None)
         # connect feedforward to non-jl_dims of bio
@@ -111,7 +112,7 @@ def test_integrator(Simulator, plt):
         # nengo.Connection(lif, bio[:dim], weights_bias_conn=True,
         #                  synapse=tau_neuron, transform=tau_neuron)
         nengo.Connection(lif, compare, synapse=tau_nengo, transform=tau_nengo)
-        # nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
+        # nengo.Connection(bio, bio, synapse=tau_neuron, solver=oracle_solver)
         conn2 = nengo.Connection(bio, bio,
                                  seed=2*conn_seed,
                                  synapse=tau_neuron,
@@ -120,7 +121,8 @@ def test_integrator(Simulator, plt):
                                  n_syn=n_syn)
         nengo.Connection(compare, compare, synapse=tau_nengo)
 
-        nengo.Connection(stim, integral, synapse=1/s)  # TODO: bug with dictionaries
+        nengo.Connection(stim, integral,
+                         synapse=nengo.LinearFilter([1.], [1., 0]))
         # nengo.Connection(integral, pre, synapse=None)
         # nengo.Connection(pre, bio[:dim],  # oracle connection
         #                  synapse=tau_neuron, transform=w_train)
@@ -219,13 +221,13 @@ def test_integrator(Simulator, plt):
 #                                      seed=bio_seed, neuron_type=nengo.LIF())
 #             integral = nengo.Node(size_in=dim)
 
-#             bio_solver = BioSolver(decoders_bio=(1.0 - w_train) * decoders_bio)
+#             oracle_solver = OracleSolver(decoders_bio=(1.0 - w_train) * decoders_bio)
 #             if jl_dims > 0:
 #                 # TODO: magnitude should scale with n_neurons (maybe 1./n^2)?
 #                 jl_decoders = np.random.RandomState(seed=333).randn(
 #                     bio_neurons, jl_dims) * 1e-4
-#                 bio_solver.decoders_bio = np.hstack(
-#                     (bio_solver.decoders_bio, jl_decoders))
+#                 oracle_solver.decoders_bio = np.hstack(
+#                     (oracle_solver.decoders_bio, jl_decoders))
 
 #             nengo.Connection(stim, lif, synapse=None)
 #             # connect feedforward to non-jl_dims of bio
@@ -233,7 +235,7 @@ def test_integrator(Simulator, plt):
 #                              synapse=tau_neuron, transform=tau_neuron)
 #             nengo.Connection(lif, compare, weights_bias_conn=True,
 #                              synapse=tau_nengo, transform=tau_nengo)
-#             nengo.Connection(bio, bio, synapse=tau_neuron, solver=bio_solver)
+#             nengo.Connection(bio, bio, synapse=tau_neuron, solver=oracle_solver)
 #             nengo.Connection(compare, compare, synapse=tau_nengo)
 
 #             nengo.Connection(stim, integral, synapse=1/s)  # integrator

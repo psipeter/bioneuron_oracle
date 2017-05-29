@@ -6,7 +6,7 @@ import neuron
 import nengo
 from nengo.utils.numpy import rmse
 
-from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, BioSolver
+from bioneuron_oracle import BahlNeuron, prime_sinusoids, step_input, OracleSolver
 
 def test_multiple_synapses(Simulator, plt):
 

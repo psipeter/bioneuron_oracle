@@ -11,7 +11,7 @@ from nengo.exceptions import BuildError
 from nengo.utils.builder import full_transform
 
 from bioneuron_oracle.bahl_neuron import BahlNeuron
-from bioneuron_oracle.solver import BioSolver, TrainedSolver
+from bioneuron_oracle.solver import OracleSolver, TrainedSolver
 
 __all__ = []
 
@@ -201,10 +201,12 @@ def build_connection(model, conn):
 
     if isinstance(conn_pre, nengo.Ensemble) and \
        isinstance(conn_pre.neuron_type, BahlNeuron):
-        if (not isinstance(conn.solver, BioSolver) and 
-                not isinstance(conn.solver, TrainedSolver)):
+        if (not isinstance(conn.solver, OracleSolver) and 
+                not isinstance(conn.solver, TrainedSolver) and
+                conn_post.label != 'temp_sub_spike_match'):  # TODO: less hacky
             raise BuildError("Connections from bioneurons must provide "
-                             "a BioSolver (got %s)" % conn.solver)
+                             "a OracleSolver or TrainedSolver (got %s)"
+                             % conn.solver)
 
     if isinstance(conn_post, nengo.Ensemble) and \
        isinstance(conn_post.neuron_type, BahlNeuron):
@@ -243,7 +245,7 @@ def build_connection(model, conn):
                 conn_pre.n_neurons, conn_post.n_neurons, conn_pre.dimensions,
                 conn_post.dimensions, conn_pre.seed, conn_post.seed)
 
-        # Grab decoders from this connections BioSolver
+        # Grab decoders from this connections OracleSolver
         # TODO: fails for slicing into TrainedSolver
         eval_points, weights, solver_info = build_decoders(
                 model, conn, rng, transform)

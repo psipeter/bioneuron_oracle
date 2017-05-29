@@ -3,7 +3,7 @@ import numpy as np
 from nengo.solvers import Solver
 from nengo.exceptions import BuildError
 
-__all__ = ['TrainedSolver', 'BioSolver']
+__all__ = ['TrainedSolver', 'OracleSolver']
 
 
 class TrainedSolver(Solver):
@@ -20,11 +20,12 @@ class TrainedSolver(Solver):
 
     def __call__(self, A, Y, rng=None, E=None):
         # return self.weights_bio, {}
+        # print 'call', self.weights_bio
         return np.zeros((self.weights_bio.shape[0], self.weights_bio.shape[1])),\
         	{'weights_bio': self.weights_bio}
 
 
-class BioSolver(Solver):
+class OracleSolver(Solver):
     """Wraps decoders coming from bioneuron ensembles."""
 
     def __init__(self, decoders_bio):
@@ -32,7 +33,7 @@ class BioSolver(Solver):
         if decoders_bio.ndim <= 1:
             decoders_bio = decoders_bio[:, None]
         self.decoders_bio = decoders_bio
-        super(BioSolver, self).__init__()
+        super(OracleSolver, self).__init__()
 
     def __call__(self, A, Y, rng=None, E=None):
         return self.decoders_bio, {}

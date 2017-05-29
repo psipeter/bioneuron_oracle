@@ -2,7 +2,7 @@ import nengo
 
 import numpy as np
 
-from bioneuron_oracle import BahlNeuron, TrainedSolver, BioSolver
+from bioneuron_oracle import BahlNeuron, TrainedSolver, OracleSolver
 
 
 def test_repeat_neuron_type(Simulator):
@@ -27,7 +27,7 @@ def test_repeat_build(Simulator):
         bio1 = nengo.Ensemble(50, 1, neuron_type=neuron_type)
         bio2 = nengo.Ensemble(20, 1, neuron_type=neuron_type)
         solver1 = TrainedSolver(weights_bio = np.zeros((50, 30, 1)))
-        solver2 = BioSolver(decoders_bio = np.zeros((20, 1)))
+        solver2 = OracleSolver(decoders_bio = np.zeros((20, 1)))
         nengo.Connection(lif1, bio1, trained_weights=True, solver=solver1)
         nengo.Connection(bio2, lif2, solver=solver2)
 
