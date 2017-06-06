@@ -1,5 +1,5 @@
 *************************************************************************
-BIOnengo - incorporating biologically-realistic NEURON models into the NEF
+BIOnengo - biologically-realistic NEURON models with the NEF
 *************************************************************************
 
 Description
