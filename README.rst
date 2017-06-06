@@ -16,13 +16,21 @@ change --prefix to another directory. If you're using virtualenv and virtualenvw
     pip install nengo matplotlib seaborn numpy pandas
 
     wget http://www.neuron.yale.edu/ftp/neuron/versions/v7.4/nrn-7.4.tar.gz
+    
     tar xzf nrn-7.4.tar.gz
+    
     cd nrn-7.4
+    
     ./configure --prefix=/home/$USER/.local --without-iv --with-nrnpython
+    
     make
+    
     (sudo) make install
+    
     cd src/nrnpython
+    
     python setup.py install
+    
     cd ../../..
     
 Install channel mechanisms for the bahl.hoc NEURON model
@@ -33,7 +41,9 @@ To run the NEURON model, bahl.hoc, you must download the .hoc file and .mod file
 Be sure to change the path to your .local directory to compile the NEURON channel mechanisms.
 
     git clone https://github.com/psipeter/bioneuron_oracle.git
+    
     cd bioneuron_oracle/NEURON_models/channels/
+    
     /home/$USER/.local/x86_64/bin/nrnivmodl
     
 If the python kernel crashes at some point and you get an error in the terminal that says "NEURON: syntax error [...] insert ih", it means that the channels weren't initialized properly.
