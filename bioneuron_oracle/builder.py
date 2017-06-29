@@ -58,8 +58,9 @@ class ExpSyn(object):
     else initialize an inhibitory syanpse with abs(weight).
     """
 
-    def __init__(self, sec, weight, tau, e_exc=0.0, e_inh=-80.0):
+    def __init__(self, sec, weight, tau, loc, e_exc=0.0, e_inh=-80.0):
         self.tau = tau
+        self.loc = loc
         self.e_exc = e_exc
         self.e_inh = e_inh
         self.syn = neuron.h.ExpSyn(sec)
@@ -246,7 +247,7 @@ def build_connection(model, conn):
                 conn_post.dimensions, conn_pre.seed, conn_post.seed)
 
         # Grab decoders from this connections OracleSolver
-        # TODO: fails for slicing into TrainedSolver
+        # TODO: fails for slicing into TrainedSolver (?)
         eval_points, weights, solver_info = build_decoders(
                 model, conn, rng, transform)
 
@@ -264,6 +265,10 @@ def build_connection(model, conn):
                 raise BuildError("Bad weight matrix shape: expected %s, got %s"
                                  % ((conn_post.n_neurons, conn_pre.n_neurons,
                                     conn.n_syn), weights.shape))
+            if isinstance(conn.post, ObjView):
+                raise BuildError("Slicing into bioneurons with\
+                    spike-match-trained weights is not implemented:\
+                    these bioneurons don't have encoders")
 
         neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
         if conn.trained_weights:  # hyperopt trained weights
@@ -278,7 +283,7 @@ def build_connection(model, conn):
                         section = bahl.cell.apical(loc[pre, syn])
                         w_ij = weights[j, pre, syn] / conn.n_syn  # TODO: better n_syn scaling
                         syn_weights[j, pre, syn] = w_ij
-                        synapse = ExpSyn(section, w_ij, tau)
+                        synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
 
         else:  # oracle weights
@@ -307,9 +312,9 @@ def build_connection(model, conn):
                         w_ij = np.dot(d_in[pre], gain * encoder)
                         if conn.weights_bias_conn:
                             w_ij += w_bias[pre]
-                        w_ij /= conn.n_syn  # TODO: better n_syn scaling
+                        w_ij = w_ij / conn.n_syn * (25.0 / loc.shape[0]) # TODO: better scaling heuristics
                         syn_weights[j, pre, syn] = w_ij
-                        synapse = ExpSyn(section, w_ij, tau)
+                        synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
         neuron.init()
 
@@ -360,6 +365,7 @@ def gen_weights_bias(pre_neurons, n_neurons, in_dim,
         biases = pre_sim.data[lif].bias
     # Desired output function Y -- just repeat "bias" m times
     Y = np.tile(biases, (pre_activities.shape[0], 1))
+    # TODO: check weights vs decoders
     weights_bias, unused_info = solver(pre_activities, Y)
     return weights_bias
 

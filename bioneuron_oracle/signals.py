@@ -3,7 +3,7 @@ import numpy as np
 __all__ = ['prime_sinusoids', 'step_input', 'equalpower']
 
 
-def prime_sinusoids(t, dim, t_final):
+def prime_sinusoids(t, dim, t_final, f_0=1):
     # todo: generate primes
     primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
               47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101,
@@ -15,7 +15,9 @@ def prime_sinusoids(t, dim, t_final):
     reordered_primes = [our_primes[(p + epoch) % len(our_primes)]
                         for p in range(len(our_primes))]
     frequencies = np.pi * np.array(reordered_primes)
-    values = np.array([np.sin(w * t) for w in frequencies])
+    # values = np.array([np.sin(f_0 * w * t) for w in frequencies])
+    # use cos() since integral will have pos and neg values
+    values = np.array([np.cos(f_0 * w * t) for w in frequencies])
     return values
 
 
@@ -58,11 +60,8 @@ def step_input(t, dim, t_final, dt, n_eval_points=10):
 
 
 def equalpower(t, dt, t_final, max_freq, dim, mean=0.0, std=1.0, seed=None):
-    from functools32 import lru_cache
-
-    t_idx = int(t / dt)  # time index
-
-    @lru_cache(maxsize=None)
+    # from functools32 import lru_cache
+    # @lru_cache(maxsize=None)
     def gen_equalpower(dt, t_final, max_freq, mean, std, n=None, seed=seed):
         """
         Eric Hunsberger's Code for his 2016 Tech Report
@@ -116,9 +115,10 @@ def equalpower(t, dt, t_final, max_freq, dim, mean=0.0, std=1.0, seed=None):
         else:
             return S
 
+    t_idx = int(t / dt)  # time index
     out = []
     for d in range(dim):
-        signal = gen_equalpower(dt, t_final+dt, max_freq, mean, std, 1, d*seed)
+        signal = gen_equalpower(dt, t_final+dt, max_freq, mean, std, 1, (d+1)*seed)
         value = signal[0][t_idx]
         out.append(value)
 

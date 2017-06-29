@@ -28,9 +28,6 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
         w_0 = 1e-3
         evo_seed = 9
         evo_t_final = 1.0
-        evo_signal = 'prime_sinusoids'
-        evo_max_freq = 5.0
-        evo_signal_seed = 234
         evo_cutoff = 50.0
     else:
         dt_nengo = params['dt_nengo']
@@ -42,10 +39,8 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
         w_0 = params['w_0']
         evo_seed = params['evo_seed']
         evo_t_final = params['evo_t_final']
-        evo_signal = params['evo_signal']
-        evo_max_freq = params['evo_max_freq']
-        evo_signal_seed = params['evo_signal_seed']
         evo_cutoff = params['evo_cutoff']
+        sim_seed = params['sim_seed']
 
 
         # Evaluate the fitness of a network using the specified weights,
@@ -78,12 +73,21 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
                     # update weights for this fitness evaluation
                     conn.solver.weights_bio = w_bio_p[conn]
 
-            with nengo.Simulator(network, dt=dt_nengo, progress_bar=False) as sim:
+            with nengo.Simulator(network, dt=dt_nengo,
+                                 progress_bar=False, seed=sim_seed) as sim:
                 sim.run(evo_t_final)
 
             lpf = nengo.Lowpass(tau_nengo)
             act_bio = lpf.filt(sim.data[bio_probes[ens]], dt=dt_nengo)
             act_lif = lpf.filt(sim.data[ideal_probes[ens]], dt=dt_nengo)
+
+            if ens.label == 'bio':
+                print 'act_lif', act_lif
+                print 'act_bio', act_bio
+
+            if ens.label == 'bio2':
+                print 'act_lif2', act_lif
+                print 'act_bio2', act_bio
 
             # ensemble-by-ensemble training
             # rmse_act = rmse(act_bio, act_lif)
@@ -147,13 +151,20 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
                     and conn_post == ens):
                     # and conn not in saved_weights):
                 n_bio = conn_post.n_neurons
-                conn.solver = TrainedSolver(
-                    weights_bio = np.zeros((conn_post.n_neurons, conn_pre.n_neurons, conn.n_syn)))
-                # heuristics for scaling w_0 and delta_w for conn statistics
-                w_0 *= 100.0 / conn.pre.n_neurons
+                # if not continue_training:  # starting a new optimization
+                #     conn.solver = TrainedSolver(
+                #         weights_bio = np.zeros((
+                #             conn_post.n_neurons, conn_pre.n_neurons, conn.n_syn)))
+                #     # heuristics for scaling w_0 and delta_w for conn statistics
+                #     w_0 *= 100.0 / conn.pre.n_neurons
+                #     for p in range(popsize):
+                #         w_pop[p][conn] = rng.uniform(-w_0, w_0,
+                #             size=conn.solver.weights_bio.shape)
+                # else:  # starting from a specified weights_bio on conn's trained_solver
                 for p in range(popsize):
-                    w_pop[p][conn] = rng.uniform(-w_0, w_0,
-                        size=conn.solver.weights_bio.shape)
+                    w_pop[p][conn] = conn.solver.weights_bio + \
+                        rng.normal(0, delta_w,
+                            size=conn.solver.weights_bio.shape)
 
         # Train the weights using some evolutionary strategy
         # fit_vs_gen = np.zeros((generations))  # ensemble-by-ensemble training
@@ -200,7 +211,7 @@ def spike_match_train(network, method="1-N", params=None, plots=False):
             ax1.plot(np.arange(0,generations), fit_vs_gen)
             ax1.set(xlabel='Generation', ylabel='Fitness (RMSE_act)')
             ax1.legend()
-            figure.savefig('plots/fitness_vs_generation.png')  # %s_ % ens)
+            figure.savefig('plots/fitness_vs_generation_%s.png' % ens)
 
     # TODO: save all connection weights
     # if name is None: name = str(network)  # untested

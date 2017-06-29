@@ -8,7 +8,7 @@ import nengo
 from nengo.utils.matplotlib import rasterplot
 from nengo.utils.numpy import rmse
 
-from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input,
+from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input, equalpower,
                               TrainedSolver, spike_match_train)
 
 def test_accuracy_vs_n_neurons(Simulator, plt):
@@ -18,11 +18,16 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
     the number of bio_neurons and measuring RMSE of xhat_bio
     """
 
-    bio_neurons = np.array([5,10,15,20])
-    n_avg = 3
+    bio_neurons = np.array([2,3,4])
+    n_avg = 2
     pre_seed = np.random.randint(0,9009,size=(bio_neurons.shape[0], n_avg))
     bio_seed = np.random.randint(0,9009,size=(bio_neurons.shape[0], n_avg))
     conn_seed = np.random.randint(0,9009,size=(bio_neurons.shape[0], n_avg))
+    network_seed = 12
+    sim_seed = 15
+    post_seed = 18
+    max_freq = 5
+    signal_seed = 123
 
     # Evolutionary Parameters
     evo_params = {
@@ -30,7 +35,7 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
         'tau_nengo': 0.05,
         'n_processes': 10,
         'popsize': 10,
-        'generations' :10,
+        'generations' :50,
         'w_0': 1e-3,
         'delta_w' :1e-4,
         'evo_seed' :9,
@@ -39,9 +44,10 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
         'evo_max_freq': 5.0,
         'evo_signal_seed': 234,
         'evo_cutoff' :50.0,
+        'sim_seed': 12,
     }
 
-    def sim(Simulator, plt, evo_params,
+    def simulate(Simulator, plt, evo_params, j,
             bio_neurons, bio_seed, pre_seed, conn_seed):
 
         # Nengo Parameters
@@ -55,8 +61,17 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
         dim = 1
         n_syn = 1
         signal = 'prime_sinusoids'
+        evo_params['generations'] = 5
+        signal = 'white_noise'
+        train = True
 
-        with nengo.Network() as network:
+        try:
+            w_bio_0 = np.load('weights/w_accuracy_%s_neurons_run_%s_pre_to_bio.npz'\
+                % (bio_neurons, j))['weights_bio']
+        except IOError:
+            w_bio_0 = np.zeros((bio_neurons, pre_neurons, n_syn))
+
+        with nengo.Network(seed=network_seed) as network:
 
             if signal == 'prime_sinusoids':
                 stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
@@ -73,56 +88,60 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
                                  seed=bio_seed, neuron_type=BahlNeuron(),
                                  max_rates=nengo.dists.Uniform(min_rate, max_rate),
                                  intercepts=nengo.dists.Uniform(-1, 1))
-            lif = nengo.Ensemble(n_neurons=bio.n_neurons, dimensions=bio.dimensions,
+            lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=bio.dimensions,
                                  seed=bio.seed, neuron_type=nengo.LIF(),
                                  max_rates=bio.max_rates, intercepts=bio.intercepts)
             direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
                                     neuron_type=nengo.Direct())
-            temp = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                    neuron_type=nengo.Direct()) 
 
-            trained_solver = TrainedSolver(
-                weights_bio = np.zeros((bio.n_neurons, pre.n_neurons, n_syn)))
+            trained_solver = TrainedSolver(w_bio_0)
+
             nengo.Connection(stim, pre, synapse=None)
             nengo.Connection(pre, lif, synapse=tau_nengo)
-            nengo.Connection(pre, bio,
+            pre_to_bio = nengo.Connection(pre, bio,
                              seed=conn_seed,
                              synapse=tau_neuron,
                              trained_weights=True,
                              solver = trained_solver,
                              n_syn=n_syn)
             nengo.Connection(stim, direct, synapse=tau_nengo)
-            conn_ideal_out = nengo.Connection(lif, temp, synapse=tau_nengo,
-                             solver=nengo.solvers.LstsqL2())
 
             probe_pre = nengo.Probe(pre, synapse=tau_nengo)
-            probe_lif = nengo.Probe(lif)
-            probe_direct = nengo.Probe(direct, synapse=None)
+            probe_lif = nengo.Probe(lif, synapse=tau_nengo)
+            probe_direct = nengo.Probe(direct, synapse=tau_nengo)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 
-        network = spike_match_train(network, method="1-N",
-                                    params=evo_params, plots=False)
-        
-        with Simulator(network, dt=dt_nengo, progress_bar=False) as sim:
+        network = spike_match_train(network, method="1-N", params=evo_params, plots=True)
+        np.savez('weights/w_accuracy_%s_neurons_pre_to_bio.npz' % bio_neurons,
+               weights_bio=pre_to_bio.solver.weights_bio)
+            
+        # set stim to be different than during spike match training
+        with network:
+            stim.output = lambda t: prime_sinusoids(t, dim, t_final)
+        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
             sim.run(t_final)
 
+        # compute oracle decoders
         lpf = nengo.Lowpass(tau_nengo)
         act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
         oracle_solver = nengo.solvers.LstsqL2(reg=0.01)
-        ideal_solver = nengo.solvers.LstsqL2(reg=0.01)
         oracle_decoders = oracle_solver(act_bio, sim.data[probe_direct])[0]
-        ideal_decoders = sim.data[conn_ideal_out].weights.T
-        xhat_bio_oracle = np.dot(act_bio, oracle_decoders)
-        xhat_bio_ideal = np.dot(act_bio, ideal_decoders)
-        xhat_lif_ideal = np.dot(act_lif, ideal_decoders)
-        rmse_bio_oracle = rmse(sim.data[probe_direct], xhat_bio_oracle)
-        rmse_bio_ideal = rmse(sim.data[probe_direct], xhat_bio_ideal)
-        rmse_lif = rmse(sim.data[probe_direct], xhat_lif_ideal)
-        # rmse_lif = rmse(sim.data[probe_direct], sim.data[probe_lif])
 
-        return rmse_bio_oracle, rmse_lif
+        # compute estimate on a new signal
+        with network:
+            stim.output = lambda t: equalpower(
+                            t, dt_nengo, t_final, max_freq, dim,
+                            mean=0.0, std=1.0, seed=2*signal_seed)
+        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
+            sim.run(t_final)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        xhat_bio = np.dot(act_bio, oracle_decoders)
+        xhat_lif = sim.data[probe_lif]
+        rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
+        rmse_lif = rmse(sim.data[probe_direct], xhat_lif)
+
+        return rmse_bio, rmse_lif
 
     rmse_bio_mean = []
     rmse_bio_std = []
@@ -132,7 +151,7 @@ def test_accuracy_vs_n_neurons(Simulator, plt):
         rmse_bio_i = []
         rmse_lif_i = []
         for j in range(bio_seed.shape[1]):
-            rmse_bio, rmse_lif = sim(Simulator, plt, evo_params,
+            rmse_bio, rmse_lif = simulate(Simulator, plt, evo_params, j,
                 bio_neurons[i], bio_seed[i,j], pre_seed[i,j], conn_seed[i,j])
             rmse_bio_i.append(rmse_bio)
             rmse_lif_i.append(rmse_lif)
@@ -162,12 +181,17 @@ def test_accuracy_vs_generations(Simulator, plt):
     the number of bio_neurons and measuring RMSE of xhat_bio
     """
 
-    generations = np.array([10,20,30,40])
-    n_avg = 3
+    generations = np.array([5,10])
+    n_avg = 2
     pre_seed = np.random.randint(0,9009,size=(generations.shape[0], n_avg))
     bio_seed = np.random.randint(0,9009,size=(generations.shape[0], n_avg))
     conn_seed = np.random.randint(0,9009,size=(generations.shape[0], n_avg))
-
+    network_seed = 12
+    sim_seed = 15
+    post_seed = 18
+    max_freq = 5
+    signal_seed = 123
+    
     # Evolutionary Parameters
     evo_params = {
         'dt_nengo': 0.001,
@@ -183,9 +207,10 @@ def test_accuracy_vs_generations(Simulator, plt):
         'evo_max_freq': 5.0,
         'evo_signal_seed': 234,
         'evo_cutoff' :50.0,
+        'sim_seed': 12,
     }
 
-    def sim(Simulator, plt, evo_params,
+    def simulate(Simulator, plt, evo_params, j,
             generations, bio_seed, pre_seed, conn_seed):
 
         # Nengo Parameters
@@ -201,8 +226,15 @@ def test_accuracy_vs_generations(Simulator, plt):
         n_syn = 1
         signal = 'prime_sinusoids'
         evo_params['generations'] = generations
+        train = True
 
-        with nengo.Network() as network:
+        try:
+            w_bio_0 = np.load('weights/w_accuracy_%s_generation_run_%s_pre_to_bio.npz'\
+                % (generations, j))['weights_bio']
+        except IOError:
+            w_bio_0 = np.zeros((bio_neurons, pre_neurons, n_syn))
+
+        with nengo.Network(seed=network_seed) as network:
 
             if signal == 'prime_sinusoids':
                 stim = nengo.Node(lambda t: prime_sinusoids(t, dim, t_final))
@@ -227,48 +259,54 @@ def test_accuracy_vs_generations(Simulator, plt):
             temp = nengo.Ensemble(n_neurons=1, dimensions=dim,
                                     neuron_type=nengo.Direct()) 
 
-            trained_solver = TrainedSolver(
-                weights_bio = np.zeros((bio.n_neurons, pre.n_neurons, n_syn)))
+            trained_solver = TrainedSolver(w_bio_0)
+
             nengo.Connection(stim, pre, synapse=None)
             nengo.Connection(pre, lif, synapse=tau_nengo)
-            nengo.Connection(pre, bio,
+            pre_to_bio = nengo.Connection(pre, bio,
                              seed=conn_seed,
                              synapse=tau_neuron,
                              trained_weights=True,
                              solver = trained_solver,
                              n_syn=n_syn)
             nengo.Connection(stim, direct, synapse=tau_nengo)
-            conn_ideal_out = nengo.Connection(lif, temp, synapse=tau_nengo,
-                             solver=nengo.solvers.LstsqL2())
 
             probe_pre = nengo.Probe(pre, synapse=tau_nengo)
-            probe_lif = nengo.Probe(lif)
-            probe_direct = nengo.Probe(direct, synapse=None)
+            probe_lif = nengo.Probe(lif, synapse=tau_nengo)
+            probe_direct = nengo.Probe(direct, synapse=tau_nengo)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 
-        network = spike_match_train(network, method="1-N",
-                                    params=evo_params, plots=False)
-        
-        with Simulator(network, dt=dt_nengo, progress_bar=False) as sim:
+        network = spike_match_train(network, method="1-N", params=evo_params, plots=True)
+        np.savez('weights/w_accuracy_%s_generation_run_%s_pre_to_bio.npz' % (generations, j),
+               weights_bio=pre_to_bio.solver.weights_bio)
+            
+        # set stim to be different than during spike match training
+        with network:
+            stim.output = lambda t: prime_sinusoids(t, dim, t_final)
+        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
             sim.run(t_final)
 
+        # compute oracle decoders
         lpf = nengo.Lowpass(tau_nengo)
         act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
         oracle_solver = nengo.solvers.LstsqL2(reg=0.01)
-        ideal_solver = nengo.solvers.LstsqL2(reg=0.01)
         oracle_decoders = oracle_solver(act_bio, sim.data[probe_direct])[0]
-        ideal_decoders = sim.data[conn_ideal_out].weights.T
-        xhat_bio_oracle = np.dot(act_bio, oracle_decoders)
-        xhat_bio_ideal = np.dot(act_bio, ideal_decoders)
-        xhat_lif_ideal = np.dot(act_lif, ideal_decoders)
-        rmse_bio_oracle = rmse(sim.data[probe_direct], xhat_bio_oracle)
-        rmse_bio_ideal = rmse(sim.data[probe_direct], xhat_bio_ideal)
-        rmse_lif = rmse(sim.data[probe_direct], xhat_lif_ideal)
-        # rmse_lif = rmse(sim.data[probe_direct], sim.data[probe_lif])
 
-        return rmse_bio_oracle, rmse_lif
+        # compute estimate on a new signal
+        with network:
+            stim.output = lambda t: equalpower(
+                            t, dt_nengo, t_final, max_freq, dim,
+                            mean=0.0, std=1.0, seed=2*signal_seed)
+        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
+            sim.run(t_final)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        xhat_bio = np.dot(act_bio, oracle_decoders)
+        xhat_lif = sim.data[probe_lif]
+        rmse_bio = rmse(sim.data[probe_direct], xhat_bio)
+        rmse_lif = rmse(sim.data[probe_direct], xhat_lif)
+
+        return rmse_bio, rmse_lif
 
     rmse_bio_mean = []
     rmse_bio_std = []
@@ -278,7 +316,7 @@ def test_accuracy_vs_generations(Simulator, plt):
         rmse_bio_i = []
         rmse_lif_i = []
         for j in range(bio_seed.shape[1]):
-            rmse_bio, rmse_lif = sim(Simulator, plt, evo_params,
+            rmse_bio, rmse_lif = simulate(Simulator, plt, evo_params, j,
                 generations[i], bio_seed[i,j], pre_seed[i,j], conn_seed[i,j])
             rmse_bio_i.append(rmse_bio)
             rmse_lif_i.append(rmse_lif)
@@ -293,7 +331,7 @@ def test_accuracy_vs_generations(Simulator, plt):
 
     plt.subplot(1, 1, 1)
     plt.errorbar(generations, rmse_bio_mean, yerr=rmse_bio_std, label='bio')
-    plt.errorbar(generations, rmse_lif_mean, yerr=rmse_lif_std, label='lif')
+    # plt.errorbar(generations, rmse_lif_mean, yerr=rmse_lif_std, label='lif')
     plt.xlabel('generations')
     plt.ylabel('RMSE ($\hat{x}(t)$, $x(t)$)')
     # plt.title('decode')
