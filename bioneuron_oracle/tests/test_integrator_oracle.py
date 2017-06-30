@@ -24,14 +24,23 @@ def test_integrator_1d(Simulator, plt):
     sim_seed = 15
     post_seed = 18
     inter_seed = 21
-    t_train = 1.0
+
+    t_train = 10.0
     t_test = 1.0
     dim = 1
     n_syn = 1
     max_freq = 5
 
     jl_dims = 3
+    jl_dim_mag = 1e-4
     cutoff = 0.1
+
+    f_0 = 1.0
+    f_0_2 = 2.0
+    amp = 2*np.pi * f_0
+    amp2 = 2*np.pi * f_0_2
+    rms = 1.0
+    radius = amp2
 
     def sim(w_train, decoders_bio=None, plots=False, t_train=1.0, t_test=1.0,
             signal_train='prime_sinusoids', signal_test='white_noise', signal_seed=123):
@@ -43,28 +52,30 @@ def test_integrator_1d(Simulator, plt):
         """
         with nengo.Network(seed=network_seed) as network:
 
-            amp = 4*np.pi
             if signal_train == 'prime_sinusoids':
-                stim = nengo.Node(lambda t: amp * prime_sinusoids(t, dim, t_train, f_0=2.0))
+                stim = nengo.Node(lambda t: amp * prime_sinusoids(t, dim, t_train, f_0=f_0))
             elif signal_train == 'step_input':
                 stim = nengo.Node(lambda t: step_input(t, dim, t_train, dt_nengo))
             elif signal_train == 'white_noise':
                 stim = nengo.Node(nengo.processes.WhiteSignal(
-                    period=t_train, high=max_freq, rms=1.0, seed=signal_seed))
+                    period=t_train, high=max_freq, rms=rms, seed=signal_seed))
                 # stim = nengo.Node(lambda t: equalpower(
                 #                       t, dt_nengo, t_train, max_freq, dim,
                 #                       mean=0.0, std=1.0, seed=signal_seed))
 
             pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
                                  seed=pre_seed, neuron_type=nengo.LIF(),
-                                 radius=amp)
+                                 radius=radius)
             bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim+jl_dims,
                                  seed=bio_seed, neuron_type=BahlNeuron(),
                                  max_rates=nengo.dists.Uniform(min_rate, max_rate),
                                  intercepts=nengo.dists.Uniform(-1, 1))
-            inter = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                 seed=inter_seed, neuron_type=nengo.LIF(),
-                                 max_rates=pre.max_rates, intercepts=pre.intercepts)
+            inter = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
+                                 seed=bio_seed, neuron_type=nengo.LIF(),
+                                 max_rates=bio.max_rates, intercepts=bio.intercepts)
+            # inter = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
+            #                      seed=inter_seed, neuron_type=nengo.LIF(),
+            #                      max_rates=pre.max_rates, intercepts=pre.intercepts)
             lif = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                                  seed=bio_seed, neuron_type=nengo.LIF(),
                                  max_rates=bio.max_rates, intercepts=bio.intercepts)
@@ -74,7 +85,7 @@ def test_integrator_1d(Simulator, plt):
             if jl_dims > 0:
                 # TODO: magnitude should scale with n_neurons (maybe 1./n^2)?
                 jl_decoders = np.random.RandomState(seed=conn_seed).randn(
-                    bio_neurons, jl_dims) * 5e-4
+                    bio_neurons, jl_dims) * jl_dim_mag
                 oracle_solver.decoders_bio = np.hstack(
                     (oracle_solver.decoders_bio, jl_decoders))
 
@@ -118,16 +129,16 @@ def test_integrator_1d(Simulator, plt):
         Run the simulation on a new signal, and use the full_decoders
         calculated above to estimate the bioneurons' outputs for plotting
         """
-        if plots:
+        if plots is not None:
             with network:
-                amp2 = 2*np.pi
+                amp2 = 4*np.pi
                 if signal_test == 'prime_sinusoids':
-                    stim.output = lambda t: amp2*prime_sinusoids(t, dim, t_test, f_0=1.0)
+                    stim.output = lambda t: amp2*prime_sinusoids(t, dim, t_test, f_0=f_0_2)
                 elif signal_test == 'step_input':
                     stim.output = lambda t: step_input(t, dim, t_test, dt_nengo)
                 elif signal_test == 'white_noise':
-                    stim = nengo.Node(nengo.processes.WhiteSignal(
-                        period=t_train, high=max_freq, rms=1.0, seed=signal_seed))
+                    stim.output = nengo.processes.WhiteSignal(
+                        period=t_train, high=max_freq, rms=rms, seed=2*signal_seed)
             #         stim.output = lambda t: equalpower(
             #                         t, dt_nengo, t_test, max_freq, dim,
             #                         mean=0.0, std=1.0, seed=2*signal_seed)
@@ -142,30 +153,85 @@ def test_integrator_1d(Simulator, plt):
             rmse_bio = rmse(sim.data[probe_integral][:,0], xhat_bio[:,0])
             rmse_lif = rmse(sim.data[probe_integral], xhat_lif)
 
-            plt.subplot(1, 1, 1)
-            # plt.plot(sim.trange(), sim.data[probe_bio], label='bio probe')
-            plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
-            plt.plot(sim.trange(), xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
+            fig, ax1 = plt.subplots(1,1)
+            ax1.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            ax1.plot(sim.trange(), xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
             if jl_dims > 0:
-                plt.plot(sim.trange(), xhat_bio[:,1:], label='jm_dims')
-            # plt.plot(sim.trange(), xhat_bio, label='jm_dims')
-            plt.plot(sim.trange(), sim.data[probe_integral], label='oracle')
-            plt.xlabel('time (s)')
-            plt.ylabel('$\hat{x}(t)$')
-            plt.title('decode')
-            plt.legend()  # prop={'size':8}
+                ax1.plot(sim.trange(), xhat_bio[:,1:], label='jm_dims')
+            ax1.plot(sim.trange(), sim.data[probe_integral], label='oracle')
+            ax1.set(xlabel='time (s)', ylabel='$\hat{x}(t)$')
+            ax1.legend()
+            fig.savefig(plots)
+
+            # plt.subplot(1, 1, 1)
+            # plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            # plt.plot(sim.trange(), xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
+            # if jl_dims > 0:
+            #     plt.plot(sim.trange(), xhat_bio[:,1:], label='jm_dims')
+            # plt.plot(sim.trange(), sim.data[probe_integral], label='oracle')
+            # plt.xlabel('time (s)')
+            # plt.ylabel('$\hat{x}(t)$')
+            # plt.title('decode')
+            # plt.legend()  # prop={'size':8}
             assert rmse_bio < cutoff
 
         return oracle_decoders
 
 
-    oracle_decoders = sim(w_train=1.0, decoders_bio=np.zeros((bio_neurons, dim)),
-        signal_train='prime_sinusoids', signal_test='prime_sinusoids', plots=False,
-        signal_seed=3, t_train=t_train, t_test=t_test)
-    oracle_decoders = sim(w_train=0.0, decoders_bio=oracle_decoders,
-        signal_train='white_noise', signal_test='white_noise', plots=True,
-        signal_seed=123, t_train=t_train, t_test=t_test)
+    # Try repeated soft-mux training
+    w_trains = np.array([1.0, 0.0])
 
+    # seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    # recurrent_decoders = np.zeros((bio_neurons, dim))
+    # for i in range(len(w_trains)):
+    #     recurrent_decoders = sim(
+    #         w_train=w_trains[i],
+    #         decoders_bio=recurrent_decoders,
+    #         signal_train='prime_sinusoids',
+    #         signal_test='prime_sinusoids',
+    #         t_train=t_train,
+    #         t_test=t_test,
+    #         signal_seed = seeds[i],
+    #         plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_3/sinusoid_sinusoid.png')
+
+    # seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    # recurrent_decoders = np.zeros((bio_neurons, dim))
+    # for i in range(len(w_trains)):
+    #     recurrent_decoders = sim(
+    #         w_train=w_trains[i],
+    #         decoders_bio=recurrent_decoders,
+    #         signal_train='white_noise',
+    #         signal_test='white_noise',
+    #         t_train=t_train,
+    #         t_test=t_test,
+    #         signal_seed = seeds[i],
+    #         plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_3/whitenoise_whitenoise.png')
+
+    # seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    # recurrent_decoders = np.zeros((bio_neurons, dim))
+    # for i in range(len(w_trains)):
+    #     recurrent_decoders = sim(
+    #         w_train=w_trains[i],
+    #         decoders_bio=recurrent_decoders,
+    #         signal_train='white_noise',
+    #         signal_test='prime_sinusoids',
+    #         t_train=t_train,
+    #         t_test=t_test,
+    #         signal_seed = seeds[i],
+    #         plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_3/whitenose_sinusoid.png')
+
+    seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    recurrent_decoders = np.zeros((bio_neurons, dim))
+    for i in range(len(w_trains)):
+        recurrent_decoders = sim(
+            w_train=w_trains[i],
+            decoders_bio=recurrent_decoders,
+            signal_train='prime_sinusoids',
+            signal_test='white_noise',
+            t_train=t_train,
+            t_test=t_test,
+            signal_seed = seeds[i],
+            plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_3/sinusoid_whitenoise.png')
 
 
 def test_integrator_2d(Simulator, plt):
@@ -185,16 +251,22 @@ def test_integrator_2d(Simulator, plt):
     sim_seed = 15
     post_seed = 18
     inter_seed = 21
-    t_train = 10.0
+    t_train = 1.0
     t_test = 1.0
-    dim = 2
     n_syn = 1
-    max_freq = 5
-
-    jl_dims = 0
-    jl_dim_mag = 2e-4
     cutoff = 0.1
 
+    dim = 2
+    jl_dims = 1
+    jl_dim_mag = 1e-4
+            
+    f_0 = 1.0
+    f_0_2 = 2.0
+    amp = 2*np.pi * f_0
+    amp2 = 2*np.pi * f_0_2
+    max_freq = 5
+    rms = 3.0
+    radius = amp2
 
     def sim(w_train, decoders_bio=None, plots=False, t_train=1.0, t_test=1.0,
             signal_train='prime_sinusoids', signal_test='white_noise', signal_seed=123):
@@ -206,12 +278,9 @@ def test_integrator_2d(Simulator, plt):
         """
         with nengo.Network(seed=network_seed) as network:
 
-            amp = 2*np.pi
-            amp2 = 4*np.pi
-            rms = 5.0
             if signal_train == 'prime_sinusoids':
-                stim = nengo.Node(lambda t: amp * prime_sinusoids(t, dim/2, t_train, f_0=1))
-                stim2 = nengo.Node(lambda t: amp2 * prime_sinusoids(t, dim/2, t_train, f_0=2))
+                stim = nengo.Node(lambda t: amp * prime_sinusoids(t, dim/2, t_train, f_0=f_0))
+                stim2 = nengo.Node(lambda t: amp2 * prime_sinusoids(t, dim/2, t_train, f_0=f_0_2))
             elif signal_train == 'step_input':
                 stim = nengo.Node(lambda t: step_input(t, dim/2, t_train, dt_nengo))
                 stim2 = nengo.Node(lambda t: step_input(t, dim/2, t_train, dt_nengo))
@@ -229,7 +298,7 @@ def test_integrator_2d(Simulator, plt):
 
             pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
                                  seed=pre_seed, neuron_type=nengo.LIF(),
-                                 radius=amp+amp2)
+                                 radius=radius)
             bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim+jl_dims,
                                  seed=bio_seed, neuron_type=BahlNeuron(),
                                  max_rates=nengo.dists.Uniform(min_rate, max_rate),
@@ -293,8 +362,8 @@ def test_integrator_2d(Simulator, plt):
         if plots:
             with network:
                 if signal_test == 'prime_sinusoids':
-                    stim.output = lambda t: amp2 * prime_sinusoids(t, dim/2, t_test, f_0=2)
-                    stim2.output = lambda t: amp * prime_sinusoids(t, dim/2, t_test, f_0=1)
+                    stim.output = lambda t: amp2 * prime_sinusoids(t, dim/2, t_test, f_0=f_0_2)
+                    stim2.output = lambda t: amp * prime_sinusoids(t, dim/2, t_test, f_0=f_0)
                 elif signal_test == 'step_input':
                     stim.output = lambda t: step_input(t, dim/2, t_test, dt_nengo)
                     stim2.output = lambda t: step_input(t, dim/2, t_test, dt_nengo)
@@ -323,24 +392,49 @@ def test_integrator_2d(Simulator, plt):
             rmse_lif = rmse(sim.data[probe_integral][:,0], xhat_lif[:,0])
             rmse_lif2 = rmse(sim.data[probe_integral][:,1], xhat_lif[:,1])
 
-            plt.subplot(1, 1, 1)
-            plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
-            plt.plot(sim.trange(), xhat_bio[:,1], label='bio, rmse=%.5f' % rmse_bio2)
-            plt.plot(sim.trange(), xhat_lif[:,0], label='lif, rmse=%.5f' % rmse_lif)
-            plt.plot(sim.trange(), xhat_lif[:,1], label='lif, rmse=%.5f' % rmse_lif2)
+            fig, ax1 = plt.subplots(1,1)
+            ax1.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            ax1.plot(sim.trange(), xhat_bio[:,1], label='bio, rmse=%.5f' % rmse_bio2)
+            ax1.plot(sim.trange(), xhat_lif[:,0], label='lif, rmse=%.5f' % rmse_lif)
+            ax1.plot(sim.trange(), xhat_lif[:,1], label='lif, rmse=%.5f' % rmse_lif2)
             if jl_dims > 0:
-                plt.plot(sim.trange(), xhat_bio[:,2:], label='jm_dims')
-            plt.plot(sim.trange(), sim.data[probe_integral], label='oracle')
-            plt.xlabel('time (s)')
-            plt.ylabel('$\hat{x}(t)$')
-            plt.title('decode')
-            plt.legend()  # prop={'size':8}
-            assert rmse_bio < cutoff
+                ax1.plot(sim.trange(), xhat_bio[:,2:], label='jm_dims')
+            ax1.plot(sim.trange(), sim.data[probe_integral], label='oracle')
+            ax1.set(xlabel='time (s)', ylabel='$\hat{x}(t)$')
+            ax1.legend()
+            fig.savefig(plots)
+
+            # plt.subplot(1, 1, 1)
+            # plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            # plt.plot(sim.trange(), xhat_bio[:,1], label='bio, rmse=%.5f' % rmse_bio2)
+            # plt.plot(sim.trange(), xhat_lif[:,0], label='lif, rmse=%.5f' % rmse_lif)
+            # plt.plot(sim.trange(), xhat_lif[:,1], label='lif, rmse=%.5f' % rmse_lif2)
+            # if jl_dims > 0:
+            #     plt.plot(sim.trange(), xhat_bio[:,2:], label='jm_dims')
+            # plt.plot(sim.trange(), sim.data[probe_integral], label='oracle')
+            # plt.xlabel('time (s)')
+            # plt.ylabel('$\hat{x}(t)$')
+            # plt.title('decode')
+            # plt.legend()  # prop={'size':8}
 
         return oracle_decoders
 
     # Try repeated soft-mux training
     w_trains = np.array([1.0, 0.0])
+
+    seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    recurrent_decoders = np.zeros((bio_neurons, dim))
+    for i in range(len(w_trains)):
+        recurrent_decoders = sim(
+            w_train=w_trains[i],
+            decoders_bio=recurrent_decoders,
+            signal_train='prime_sinusoids',
+            signal_test='prime_sinusoids',
+            t_train=t_train,
+            t_test=t_test,
+            signal_seed = seeds[i],
+            plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_1_nrn_100_1s_2d/sinusoid_sinusoid.png')
+
     seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
     recurrent_decoders = np.zeros((bio_neurons, dim))
     for i in range(len(w_trains)):
@@ -352,11 +446,30 @@ def test_integrator_2d(Simulator, plt):
             t_train=t_train,
             t_test=t_test,
             signal_seed = seeds[i],
-            plots=(w_trains[i] == 0.0))
+            plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_1_nrn_100_1s_2d/whitenoise_whitenoise.png')
 
-    # oracle_decoders = sim(w_train=1.0, decoders_bio=np.zeros((bio_neurons, dim)),
-    #     signal_train='white_noise', signal_test='white_noise', plots=False,
-    #     signal_seed=3, t_train=t_train, t_test=t_test)
-    # oracle_decoders = sim(w_train=0.0, decoders_bio=oracle_decoders,
-    #     signal_train='white_noise', signal_test='white_noise', plots=True,
-    #     signal_seed=123, t_train=t_train, t_test=t_test)
+    seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    recurrent_decoders = np.zeros((bio_neurons, dim))
+    for i in range(len(w_trains)):
+        recurrent_decoders = sim(
+            w_train=w_trains[i],
+            decoders_bio=recurrent_decoders,
+            signal_train='white_noise',
+            signal_test='prime_sinusoids',
+            t_train=t_train,
+            t_test=t_test,
+            signal_seed = seeds[i],
+            plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_1_nrn_100_1s_2d/whitenose_sinusoid.png')
+
+    seeds = np.random.RandomState(seed=bio_seed).randint(999, size=w_trains.shape)
+    recurrent_decoders = np.zeros((bio_neurons, dim))
+    for i in range(len(w_trains)):
+        recurrent_decoders = sim(
+            w_train=w_trains[i],
+            decoders_bio=recurrent_decoders,
+            signal_train='prime_sinusoids',
+            signal_test='white_noise',
+            t_train=t_train,
+            t_test=t_test,
+            signal_seed = seeds[i],
+            plots='/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/JL_dims_1_nrn_100_1s_2d/sinusoid_whitenoise.png')
