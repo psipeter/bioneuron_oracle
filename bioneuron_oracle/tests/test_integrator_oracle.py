@@ -167,33 +167,33 @@ def test_integrator_1d(Simulator, plt):
         """
         Make a KDE plot of the bioneurons' activities
         """
-        import pandas
-        import seaborn
-        columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder', 'x_dot_e')
-        df_list = []
-        times = np.arange(dt_nengo, t_final, dt_nengo)
-        for i in range(3):  # len(sim.data[bio.neurons])
-            encoder = bio.encoders[i][:dim]  # ignore JL_dims for decoding state
-            for t, time in enumerate(times):
-                act_bio_i = act_bio[t,i]
-                act_lif_i = act_lif[t,i]
-                value = sim.data[probe_integral][t] # todo: pre + feedback?
-                x_dot_e = np.dot(value, encoder)
-                df_temp = pandas.DataFrame(
-                    [[time, i, act_bio_i, act_lif_i, encoder[0], x_dot_e]],
-                    columns=columns)
-                df_list.append(df_temp)
-        df = pandas.concat(df_list, ignore_index=True)
-        for i in range(3):  # len(sim.data[bio.neurons])
-            df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
-            fig1, ax1, = plt.subplots(1,1)
-            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
-                cmap='Blues', shade=True, shade_lowest=False, label='bio')
-            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
-                cmap='Reds', shade=True, shade_lowest=False, label='lif')
-            ax1.legend()
-            fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_kdeplot.png' %
-                (dim, w_train, jl_dims, i, signal, p_signal))
+        # import pandas
+        # import seaborn
+        # columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder', 'x_dot_e')
+        # df_list = []
+        # times = np.arange(dt_nengo, t_final, dt_nengo)
+        # for i in range(3):  # len(sim.data[bio.neurons])
+        #     encoder = bio.encoders[i][:dim]  # ignore JL_dims for decoding state
+        #     for t, time in enumerate(times):
+        #         act_bio_i = act_bio[t,i]
+        #         act_lif_i = act_lif[t,i]
+        #         value = sim.data[probe_integral][t] # todo: pre + feedback?
+        #         x_dot_e = np.dot(value, encoder)
+        #         df_temp = pandas.DataFrame(
+        #             [[time, i, act_bio_i, act_lif_i, encoder[0], x_dot_e]],
+        #             columns=columns)
+        #         df_list.append(df_temp)
+        # df = pandas.concat(df_list, ignore_index=True)
+        # for i in range(3):  # len(sim.data[bio.neurons])
+        #     df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
+        #     fig1, ax1, = plt.subplots(1,1)
+        #     seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
+        #         cmap='Blues', shade=True, shade_lowest=False, label='bio')
+        #     seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
+        #         cmap='Reds', shade=True, shade_lowest=False, label='lif')
+        #     ax1.legend()
+        #     fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_kdeplot.png' %
+        #         (dim, w_train, jl_dims, i, signal, p_signal))
             # fig2, ax2, = plt.subplots(1,1)
             # ax2.plot(df_nrn['time'], df_nrn['act_bio'], label='bio')
             # ax2.plot(df_nrn['time'], df_nrn['act_lif'], label='lif')
@@ -209,22 +209,49 @@ def test_integrator_1d(Simulator, plt):
     d_JL = jl_rng.randn(bio_neurons, jl_dims) * jl_dim_mag
     d_readout_init = np.hstack((d_recurrent_init, d_JL))
 
-    d_recurrent_new, d_JL, d_readout_extra, rmse_bio = sim(
+    d_recurrent_new, d_JL, d_readout_new, rmse_bio = sim(
         w_train=1.0,
         d_recurrent=d_recurrent_init,
         d_JL=d_JL,
         d_readout=d_readout_init,
-        signal='prime_sinusoids',
-        p_signal = 1.0,  # float for f_0 for sinusoid, int for seed for whitesignal
+        signal='white_noise',
+        p_signal = 1,  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
-    d_recurrent_extra, d_JL, d_readout_new, rmse_bio = sim(
+    d_recurrent_new, d_JL, d_readout_new, rmse_bio = sim(
+        w_train=0.75,
+        d_recurrent=d_recurrent_new,
+        d_JL=d_JL,
+        d_readout=d_readout_new,
+        signal='white_noise',
+        p_signal = 1,  # float for f_0 for sinusoid, int for seed for whitesignal
+        t_final=t_final,
+        plot_dir=plot_dir)
+    d_recurrent_new, d_JL, d_readout_new, rmse_bio = sim(
+        w_train=0.5,
+        d_recurrent=d_recurrent_new,
+        d_JL=d_JL,
+        d_readout=d_readout_new,
+        signal='white_noise',
+        p_signal = 1,  # float for f_0 for sinusoid, int for seed for whitesignal
+        t_final=t_final,
+        plot_dir=plot_dir)
+    d_recurrent_new, d_JL, d_readout_new, rmse_bio = sim(
+        w_train=0.25,
+        d_recurrent=d_recurrent_new,
+        d_JL=d_JL,
+        d_readout=d_readout_new,
+        signal='white_noise',
+        p_signal = 1,  # float for f_0 for sinusoid, int for seed for whitesignal
+        t_final=t_final,
+        plot_dir=plot_dir)
+    d_recurrent_new, d_JL, d_readout_new, rmse_bio = sim(
         w_train=0.0,
         d_recurrent=d_recurrent_new,
         d_JL=d_JL,
-        d_readout=d_readout_init,
-        signal='prime_sinusoids',
-        p_signal = 1.5,  # float for f_0 for sinusoid, int for seed for whitesignal
+        d_readout=d_readout_new,
+        signal='white_noise',
+        p_signal = 1,  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
     d_recurrent_extra, d_JL, d_readout_extra, rmse_bio = sim(
@@ -232,8 +259,8 @@ def test_integrator_1d(Simulator, plt):
         d_recurrent=d_recurrent_new,
         d_JL=d_JL,
         d_readout=d_readout_new,
-        signal='prime_sinusoids',
-        p_signal = 2.0,  # float for f_0 for sinusoid, int for seed for whitesignal
+        signal='white_noise',
+        p_signal = 2,  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
 
@@ -270,7 +297,7 @@ def test_integrator_2d(Simulator, plt):
 
     dim = 2
     jl_dims = 3
-    jl_dim_mag = 2e-4
+    jl_dim_mag = 1e-4
 
     cutoff = 0.1
 
@@ -409,33 +436,33 @@ def test_integrator_2d(Simulator, plt):
         """
         Make a KDE plot of the bioneurons' activities
         """
-        import pandas
-        import seaborn
-        columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder_0', 'encoder_1', 'x_dot_e')
-        df_list = []
-        times = np.arange(dt_nengo, t_final, dt_nengo)
-        for i in range(3):  # len(sim.data[bio.neurons])
-            encoder = bio.encoders[i][:dim]
-            for t, time in enumerate(times):
-                act_bio_i = act_bio[t,i]
-                act_lif_i = act_lif[t,i]
-                value = sim.data[probe_integral][t] # todo: pre + feedback?
-                x_dot_e = np.dot(value, encoder)
-                df_temp = pandas.DataFrame(
-                    [[time, i, act_bio_i, act_lif_i, encoder[0], encoder[1], x_dot_e]],
-                    columns=columns)
-                df_list.append(df_temp)
-        df = pandas.concat(df_list, ignore_index=True)
-        for i in range(3):  # len(sim.data[bio.neurons])
-            df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
-            fig1, ax1, = plt.subplots(1,1)
-            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
-                cmap='Blues', shade=True, shade_lowest=False, label='bio')
-            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
-                cmap='Reds', shade=True, shade_lowest=False, label='lif')
-            ax1.legend()
-            fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_%s_kdeplot.png' %
-                (dim, w_train, jl_dims, i, signal, p_signal[0], p_signal[1]))
+        # import pandas
+        # import seaborn
+        # columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder_0', 'encoder_1', 'x_dot_e')
+        # df_list = []
+        # times = np.arange(dt_nengo, t_final, dt_nengo)
+        # for i in range(3):  # len(sim.data[bio.neurons])
+        #     encoder = bio.encoders[i][:dim]
+        #     for t, time in enumerate(times):
+        #         act_bio_i = act_bio[t,i]
+        #         act_lif_i = act_lif[t,i]
+        #         value = sim.data[probe_integral][t] # todo: pre + feedback?
+        #         x_dot_e = np.dot(value, encoder)
+        #         df_temp = pandas.DataFrame(
+        #             [[time, i, act_bio_i, act_lif_i, encoder[0], encoder[1], x_dot_e]],
+        #             columns=columns)
+        #         df_list.append(df_temp)
+        # df = pandas.concat(df_list, ignore_index=True)
+        # for i in range(3):  # len(sim.data[bio.neurons])
+        #     df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
+        #     fig1, ax1, = plt.subplots(1,1)
+        #     seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
+        #         cmap='Blues', shade=True, shade_lowest=False, label='bio')
+        #     seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
+        #         cmap='Reds', shade=True, shade_lowest=False, label='lif')
+        #     ax1.legend()
+        #     fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_%s_kdeplot.png' %
+        #         (dim, w_train, jl_dims, i, signal, p_signal[0], p_signal[1]))
 
         return d_recurrent_new, d_JL, d_readout_new, rmse_bio
 
@@ -449,8 +476,8 @@ def test_integrator_2d(Simulator, plt):
         d_recurrent=d_recurrent_init,
         d_JL=d_JL,
         d_readout=d_readout_init,
-        signal='prime_sinusoids',
-        p_signal = [1.0, 2.0],  # float for f_0 for sinusoid, int for seed for whitesignal
+        signal='white_noise',
+        p_signal = [1, 2],  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
     d_recurrent_extra, d_JL, d_readout_new, rmse_bio = sim(
@@ -458,8 +485,8 @@ def test_integrator_2d(Simulator, plt):
         d_recurrent=d_recurrent_new,
         d_JL=d_JL,
         d_readout=d_readout_init,
-        signal='prime_sinusoids',
-        p_signal = [1.0, 2.0],  # float for f_0 for sinusoid, int for seed for whitesignal
+        signal='white_noise',
+        p_signal = [1, 2],  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
     d_recurrent_extra, d_JL, d_readout_extra, rmse_bio = sim(
@@ -467,8 +494,8 @@ def test_integrator_2d(Simulator, plt):
         d_recurrent=d_recurrent_new,
         d_JL=d_JL,
         d_readout=d_readout_new,
-        signal='prime_sinusoids',
-        p_signal = [1.5, 3.0],  # float for f_0 for sinusoid, int for seed for whitesignal
+        signal='white_noise',
+        p_signal = [3, 4], #[1.5, 3.0],  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
 
