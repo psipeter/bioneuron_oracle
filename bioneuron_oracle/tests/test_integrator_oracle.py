@@ -28,12 +28,15 @@ def test_integrator_1d(Simulator, plt):
     post_seed = 18
     inter_seed = 21
 
+    max_freq = 5
+    radius = 12  # changing radius changes pre-bio weights (bias emulation)
+
     jl_rng = np.random.RandomState(seed=conn_seed)
     plot_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/'
 
     dim = 1
     jl_dims = 3
-    jl_dim_mag = 2e-4
+    jl_dim_mag = 1e-4
 
     cutoff = 0.1
 
@@ -52,8 +55,6 @@ def test_integrator_1d(Simulator, plt):
             d_full = (1.0 - w_train) * d_recurrent
         amp = 2 * np.pi * p_signal
         rms = 3.0
-        max_freq = 5
-        radius = max(amp, rms)  # changing radius changes pre-bio weights (bias emulation)
 
         with nengo.Network(seed=network_seed) as network:
 
@@ -98,7 +99,7 @@ def test_integrator_1d(Simulator, plt):
             # if w_train != 0.0:
             nengo.Connection(integral, inter, synapse=None)
             nengo.Connection(inter, bio[:dim],  # oracle training connection
-                             synapse=tau_neuron, transform=w_train)  # todo: does this nullify weights?
+                             synapse=tau_neuron, transform=w_train)
 
             probe_lif = nengo.Probe(lif, synapse=tau_nengo)
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
@@ -114,6 +115,7 @@ def test_integrator_1d(Simulator, plt):
             sim.run(t_final)
         lpf = nengo.Lowpass(tau_nengo)
         act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
         d_recurrent_new = nengo.solvers.LstsqL2(reg=0.01)(act_bio, sim.data[probe_integral])[0]
         if jl_dims > 0:
             d_full_new = np.hstack((d_recurrent_new, d_JL))
@@ -160,6 +162,45 @@ def test_integrator_1d(Simulator, plt):
         # plt.title('decode')
         # plt.legend()  # prop={'size':8}
         # assert rmse_bio < cutoff
+
+
+        """
+        Make a KDE plot of the bioneurons' activities
+        """
+        import pandas
+        import seaborn
+        columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder', 'x_dot_e')
+        df_list = []
+        times = np.arange(dt_nengo, t_final, dt_nengo)
+        for i in range(3):  # len(sim.data[bio.neurons])
+            encoder = bio.encoders[i][:dim]  # ignore JL_dims for decoding state
+            for t, time in enumerate(times):
+                act_bio_i = act_bio[t,i]
+                act_lif_i = act_lif[t,i]
+                value = sim.data[probe_integral][t] # todo: pre + feedback?
+                x_dot_e = np.dot(value, encoder)
+                df_temp = pandas.DataFrame(
+                    [[time, i, act_bio_i, act_lif_i, encoder[0], x_dot_e]],
+                    columns=columns)
+                df_list.append(df_temp)
+        df = pandas.concat(df_list, ignore_index=True)
+        for i in range(3):  # len(sim.data[bio.neurons])
+            df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
+            fig1, ax1, = plt.subplots(1,1)
+            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
+                cmap='Blues', shade=True, shade_lowest=False, label='bio')
+            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
+                cmap='Reds', shade=True, shade_lowest=False, label='lif')
+            ax1.legend()
+            fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_kdeplot.png' %
+                (dim, w_train, jl_dims, i, signal, p_signal))
+            # fig2, ax2, = plt.subplots(1,1)
+            # ax2.plot(df_nrn['time'], df_nrn['act_bio'], label='bio')
+            # ax2.plot(df_nrn['time'], df_nrn['act_lif'], label='lif')
+            # ax2.plot(sim.trange(), 100*sim.data[probe_integral], label='scaled oracle')
+            # ax2.legend()
+            # fig2.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_activity_vs_time.png' %
+            #     (dim, w_train, jl_dims, i, signal, p_signal))
 
         return d_recurrent_new, d_JL, d_readout_new, rmse_bio
 
@@ -221,12 +262,15 @@ def test_integrator_2d(Simulator, plt):
     post_seed = 18
     inter_seed = 21
 
+    max_freq = 5
+    radius = 12  # changing radius changes pre-bio weights (bias emulation)
+
     jl_rng = np.random.RandomState(seed=conn_seed)
     plot_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/'
 
     dim = 2
-    jl_dims = 1
-    jl_dim_mag = 3e-4
+    jl_dims = 3
+    jl_dim_mag = 2e-4
 
     cutoff = 0.1
 
@@ -246,8 +290,6 @@ def test_integrator_2d(Simulator, plt):
         amp = 2 * np.pi * p_signal[0]
         amp2 = 2 * np.pi * p_signal[1]
         rms = 3.0
-        max_freq = 5
-        radius = max(amp, rms)  # changing radius changes pre-bio weights (bias emulation)
 
         with nengo.Network(seed=network_seed) as network:
 
@@ -312,6 +354,7 @@ def test_integrator_2d(Simulator, plt):
             sim.run(t_final)
         lpf = nengo.Lowpass(tau_nengo)
         act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
         d_recurrent_new = nengo.solvers.LstsqL2(reg=0.01)(act_bio, sim.data[probe_integral])[0]
         if jl_dims > 0:
             d_full_new = np.hstack((d_recurrent_new, d_JL))
@@ -363,6 +406,37 @@ def test_integrator_2d(Simulator, plt):
         # plt.legend()  # prop={'size':8}
         # assert rmse_bio < cutoff
 
+        """
+        Make a KDE plot of the bioneurons' activities
+        """
+        import pandas
+        import seaborn
+        columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder_0', 'encoder_1', 'x_dot_e')
+        df_list = []
+        times = np.arange(dt_nengo, t_final, dt_nengo)
+        for i in range(3):  # len(sim.data[bio.neurons])
+            encoder = bio.encoders[i][:dim]
+            for t, time in enumerate(times):
+                act_bio_i = act_bio[t,i]
+                act_lif_i = act_lif[t,i]
+                value = sim.data[probe_integral][t] # todo: pre + feedback?
+                x_dot_e = np.dot(value, encoder)
+                df_temp = pandas.DataFrame(
+                    [[time, i, act_bio_i, act_lif_i, encoder[0], encoder[1], x_dot_e]],
+                    columns=columns)
+                df_list.append(df_temp)
+        df = pandas.concat(df_list, ignore_index=True)
+        for i in range(3):  # len(sim.data[bio.neurons])
+            df_nrn = pandas.DataFrame(df.query("nrn==%s"%i)).reset_index()
+            fig1, ax1, = plt.subplots(1,1)
+            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_bio'],
+                cmap='Blues', shade=True, shade_lowest=False, label='bio')
+            seaborn.kdeplot(df_nrn['x_dot_e'], df_nrn['act_lif'],
+                cmap='Reds', shade=True, shade_lowest=False, label='lif')
+            ax1.legend()
+            fig1.savefig(plot_dir+'dim=%s_wtrain=%s_jldims=%s_nrn=%s_%s_%s_%s_kdeplot.png' %
+                (dim, w_train, jl_dims, i, signal, p_signal[0], p_signal[1]))
+
         return d_recurrent_new, d_JL, d_readout_new, rmse_bio
 
 
@@ -394,7 +468,7 @@ def test_integrator_2d(Simulator, plt):
         d_JL=d_JL,
         d_readout=d_readout_new,
         signal='prime_sinusoids',
-        p_signal = [0.5, 1.5],  # float for f_0 for sinusoid, int for seed for whitesignal
+        p_signal = [1.5, 3.0],  # float for f_0 for sinusoid, int for seed for whitesignal
         t_final=t_final,
         plot_dir=plot_dir)
 

@@ -843,7 +843,7 @@ def test_bio_to_bio(Simulator, plt):
 
     cutoff = 0.3
     transform = -0.5
-    dim = 1
+    dim = 2
     bio_neurons = 20
     post_neurons = 20
 
