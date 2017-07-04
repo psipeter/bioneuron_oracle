@@ -71,7 +71,7 @@ class ExpSyn(object):
         else:
             self.syn.e = self.e_inh
         # time of spike arrival assigned in nengo step
-        self.spike_in = neuron.h.NetCon(None, self.syn)
+        self.spike_in = neuron.h.NetCon(None, self.syn)        
         self.spike_in.weight[0] = abs(self.weight)
 
 
@@ -168,7 +168,7 @@ def build_bahlneuron(model, neuron_type, neurons):
     if (not hasattr(ens, 'encoders') or
             not isinstance(ens.encoders, np.ndarray)):
         encoders, gains = gen_encoders_gains(
-            ens.n_neurons, ens.dimensions, ens.seed)
+            ens.n_neurons, ens.dimensions, ens.max_rates, ens.intercepts, ens.seed)
         ens.encoders = encoders
         ens.gain = gains
         ens.bias = np.zeros_like(gains)
@@ -243,8 +243,18 @@ def build_connection(model, conn):
         # emulated biases in weight space
         if conn.weights_bias_conn:
             weights_bias = gen_weights_bias(
-                conn_pre.n_neurons, conn_post.n_neurons, conn_pre.dimensions,
-                conn_post.dimensions, conn_pre.seed, conn_post.seed)
+                conn_pre.n_neurons,
+                conn_pre.dimensions,
+                conn_pre.max_rates,
+                conn_pre.intercepts,
+                conn_pre.radius,
+                conn_pre.seed,
+                conn_post.n_neurons,
+                conn_post.dimensions,
+                conn_post.max_rates,
+                conn_post.intercepts,
+                conn_post.radius,
+                conn_post.seed)
 
         # Grab decoders from this connections OracleSolver
         # TODO: fails for slicing into TrainedSolver (?)
@@ -270,6 +280,12 @@ def build_connection(model, conn):
                     spike-match-trained weights is not implemented:\
                     these bioneurons don't have encoders")
 
+        # normalize the area under the ExpSyn curve to compensate for effect of tau
+        times = np.arange(0, 1.0, 0.001)  # to 1s by dt=0.001
+        k_norm = np.linalg.norm(np.exp((-times/conn.synapse.tau)),1)
+        # print np.sum(np.exp(-times/conn.synapse.tau)/k_norm)
+        # print k_norm
+
         neurons = model.params[conn_post.neurons]  # set in build_bahlneuron
         if conn.trained_weights:  # hyperopt trained weights
             for j, bahl in enumerate(neurons):
@@ -281,7 +297,7 @@ def build_connection(model, conn):
                 for pre in range(loc.shape[0]):
                     for syn in range(loc.shape[1]):
                         section = bahl.cell.apical(loc[pre, syn])
-                        w_ij = weights[j, pre, syn] / conn.n_syn  # TODO: better n_syn scaling
+                        w_ij = weights[j, pre, syn] / conn.n_syn / k_norm # TODO: better n_syn scaling
                         syn_weights[j, pre, syn] = w_ij
                         synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
@@ -312,7 +328,7 @@ def build_connection(model, conn):
                         w_ij = np.dot(d_in[pre], gain * encoder)
                         if conn.weights_bias_conn:
                             w_ij += w_bias[pre]
-                        w_ij = w_ij / conn.n_syn * (25.0 / loc.shape[0]) # TODO: better scaling heuristics
+                        w_ij = w_ij / conn.n_syn / k_norm * 15 #(15.0 / loc[pre, syn]) # TODO: better scaling heuristics
                         syn_weights[j, pre, syn] = w_ij
                         synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
@@ -330,35 +346,63 @@ def build_connection(model, conn):
         return nengo.builder.connection.build_connection(model, conn)
 
 
-def gen_encoders_gains(n_neurons, dimensions, seed):
+def gen_encoders_gains(n_neurons,
+                    dimensions,
+                    max_rates,
+                    intercepts,
+                    seed):
     """
     Alternative to gain_bias() for bioneurons.
     Called in custom build_connections().
-    TODO: add max_rates and other scaling properties.
-    TODO: this function seems unnecessary
     """
     with nengo.Network(add_to_container=False) as pre_model:
-        lif = nengo.Ensemble(n_neurons=n_neurons, dimensions=dimensions,
-                             neuron_type=nengo.LIF(), seed=seed)
+        lif = nengo.Ensemble(
+                    n_neurons=n_neurons,
+                    dimensions=dimensions,
+                    neuron_type=nengo.LIF(),
+                    max_rates=max_rates, 
+                    intercepts=intercepts,
+                    seed=seed)
     with nengo.Simulator(pre_model) as pre_sim:
         encoders = pre_sim.data[lif].encoders
         gains = pre_sim.data[lif].gain
     return encoders, gains
 
 
-def gen_weights_bias(pre_neurons, n_neurons, in_dim,
-                     out_dim, pre_seed, bio_seed,
-                     solver=nengo.solvers.LstsqL2(reg=0.01)):
+def gen_weights_bias(pre_n_neurons,
+                pre_dimensions,
+                pre_max_rates,
+                pre_intercepts,
+                pre_radius,
+                pre_seed,
+                post_n_neurons,
+                post_dimensions,
+                post_max_rates,
+                post_intercepts,
+                post_radius,
+                post_seed):
     """
     Build a pre-simulation network to draw biases from Nengo,
     then return a weight matrix that emulates the bias
     (by adding weights to the synaptic weights in init_connection().
+    TODO: add max_rates and other scaling properties.
     """
     with nengo.Network(add_to_container=False) as pre_model:
-        pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=in_dim,
-                             seed=pre_seed)
-        lif = nengo.Ensemble(n_neurons=n_neurons, dimensions=out_dim,
-                             neuron_type=nengo.LIF(), seed=bio_seed)
+        pre = nengo.Ensemble(
+                n_neurons=pre_n_neurons,
+                dimensions=pre_dimensions,
+                max_rates=pre_max_rates,
+                intercepts=pre_intercepts,
+                radius=pre_radius,
+                seed=pre_seed)
+        lif = nengo.Ensemble(
+                n_neurons=post_n_neurons,
+                dimensions=post_dimensions,
+                max_rates=post_max_rates,
+                intercepts=post_intercepts,
+                radius=post_radius,
+                seed=post_seed,
+                neuron_type=nengo.LIF())
     with nengo.Simulator(pre_model) as pre_sim:
         pre_activities = get_activities(pre_sim.data[pre], pre,
                                         pre_sim.data[pre].eval_points)
@@ -366,7 +410,7 @@ def gen_weights_bias(pre_neurons, n_neurons, in_dim,
     # Desired output function Y -- just repeat "bias" m times
     Y = np.tile(biases, (pre_activities.shape[0], 1))
     # TODO: check weights vs decoders
-    weights_bias, unused_info = solver(pre_activities, Y)
+    weights_bias, unused_info = nengo.solvers.LstsqL2(reg=0.01)(pre_activities, Y)
     return weights_bias
 
 
