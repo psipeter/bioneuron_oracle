@@ -167,8 +167,18 @@ def build_bahlneuron(model, neuron_type, neurons):
     # if this hasn't already been done
     if (not hasattr(ens, 'encoders') or
             not isinstance(ens.encoders, np.ndarray)):
-        encoders, gains = gen_encoders_gains(
-            ens.n_neurons, ens.dimensions, ens.max_rates, ens.intercepts, ens.seed)
+        rng = np.random.RandomState(seed=ens.seed)
+        encoders, gains = gen_encoders_gains_manual(
+            ens.n_neurons,
+            ens.dimensions,
+            rng)
+        # encoders, gains = gen_encoders_gains_LIF(
+        #     ens.n_neurons,
+        #     ens.dimensions,
+        #     ens.max_rates,
+        #     ens.intercepts,
+        #     ens.radius,
+        #     ens.seed)
         ens.encoders = encoders
         ens.gain = gains
         ens.bias = np.zeros_like(gains)
@@ -242,19 +252,23 @@ def build_connection(model, conn):
 
         # emulated biases in weight space
         if conn.weights_bias_conn:
-            weights_bias = gen_weights_bias(
+            weights_bias = gen_weights_bias_manual(
                 conn_pre.n_neurons,
-                conn_pre.dimensions,
-                conn_pre.max_rates,
-                conn_pre.intercepts,
-                conn_pre.radius,
-                conn_pre.seed,
                 conn_post.n_neurons,
-                conn_post.dimensions,
-                conn_post.max_rates,
-                conn_post.intercepts,
-                conn_post.radius,
-                conn_post.seed)
+                rng)
+            # weights_bias = gen_weights_bias_LIF(
+            #     conn_pre.n_neurons,
+            #     conn_pre.dimensions,
+            #     conn_pre.max_rates,
+            #     conn_pre.intercepts,
+            #     conn_pre.radius,
+            #     conn_pre.seed,
+            #     conn_post.n_neurons,
+            #     conn_post.dimensions,
+            #     conn_post.max_rates,
+            #     conn_post.intercepts,
+            #     conn_post.radius,
+            #     conn_post.seed)
 
         # Grab decoders from this connections OracleSolver
         # TODO: fails for slicing into TrainedSolver (?)
@@ -315,16 +329,16 @@ def build_connection(model, conn):
                 bahl.synapses[conn_pre] = np.empty(
                     (loc.shape[0], loc.shape[1]), dtype=object)
                 for pre in range(loc.shape[0]):
-                    if conn.synaptic_encoders or conn.synaptic_gains:
-                        seed = conn_post.seed + j + pre
-                        n_syn = loc.shape[0] * loc.shape[1]
-                        dim = conn_post.dimensions
-                        syn_encoders, syn_gains = gen_encoders_gains(n_syn, dim, seed)
+                    # if conn.synaptic_encoders or conn.synaptic_gains:  # todo
+                    #     seed = conn_post.seed + j + pre
+                    #     n_syn = loc.shape[0] * loc.shape[1]
+                    #     dim = conn_post.dimensions
+                    #     syn_encoders, syn_gains = gen_encoders_gains_LIF(n_syn, dim, seed)
                     for syn in range(loc.shape[1]):
                         section = bahl.cell.apical(loc[pre, syn])
-                        if conn.synaptic_encoders or conn.synaptic_gains:
-                            encoder = syn_encoders[syn]
-                            gain = syn_gains[syn]
+                        # if conn.synaptic_encoders or conn.synaptic_gains:  # todo
+                        #     encoder = syn_encoders[syn]
+                        #     gain = syn_gains[syn]
                         w_ij = np.dot(d_in[pre], gain * encoder)
                         if conn.weights_bias_conn:
                             w_ij += w_bias[pre]
@@ -345,11 +359,27 @@ def build_connection(model, conn):
     else:  # normal connection
         return nengo.builder.connection.build_connection(model, conn)
 
+def gen_encoders_gains_manual(n_neurons, dimensions, rng):
+    enc_mag = 1e+1  # todo: pass as parameter
+    gain_mag = 1e+2
+    encoders = rng.uniform(-enc_mag, enc_mag, size=(n_neurons, dimensions))
+    # dist = nengo.dists.UniformHypersphere()
+    # encoders = nengo.dists.get_samples(dist, n=n_neurons, d=dimensions, rng=rng)
+    gains = rng.uniform(-gain_mag, gain_mag, size=n_neurons)
+    # gain_mag = 1e+1
+    # gains = rng.normal(0, gain_mag, size=n_neurons)
+    return encoders, gains
 
-def gen_encoders_gains(n_neurons,
+def gen_weights_bias_manual(pre_n_neurons, post_n_neurons, rng):
+    w_bias_mag = 1e-1
+    w_bias = rng.uniform(-w_bias_mag, w_bias_mag, size=(pre_n_neurons, post_n_neurons))
+    return w_bias
+
+def gen_encoders_gains_LIF(n_neurons,
                     dimensions,
                     max_rates,
                     intercepts,
+                    radius,
                     seed):
     """
     Alternative to gain_bias() for bioneurons.
@@ -362,14 +392,14 @@ def gen_encoders_gains(n_neurons,
                     neuron_type=nengo.LIF(),
                     max_rates=max_rates, 
                     intercepts=intercepts,
+                    radius=radius,
                     seed=seed)
     with nengo.Simulator(pre_model) as pre_sim:
         encoders = pre_sim.data[lif].encoders
         gains = pre_sim.data[lif].gain
     return encoders, gains
 
-
-def gen_weights_bias(pre_n_neurons,
+def gen_weights_bias_LIF(pre_n_neurons,
                 pre_dimensions,
                 pre_max_rates,
                 pre_intercepts,

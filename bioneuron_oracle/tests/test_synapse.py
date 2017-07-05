@@ -391,11 +391,11 @@ def test_synapse_tau(Simulator, plt):
         pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
                              seed=pre_seed, neuron_type=nengo.LIF())
         bio_small = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                   seed=bio_seed, neuron_type=BahlNeuron())
+                                   seed=8, neuron_type=BahlNeuron())
         bio_medium = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                    seed=bio_seed, neuron_type=BahlNeuron())
+                                    seed=8, neuron_type=BahlNeuron())
         bio_large = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                   seed=bio_seed, neuron_type=BahlNeuron())
+                                   seed=8, neuron_type=BahlNeuron())
         lif_small = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
                                    neuron_type=nengo.LIF(), seed=bio_seed,
                                    gain=gain, bias=[0])

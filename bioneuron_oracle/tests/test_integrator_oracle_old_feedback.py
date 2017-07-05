@@ -13,11 +13,11 @@ def test_integrator_1d(Simulator, plt):
     pre_neurons = 100
     bio_neurons = 100
     tau = 0.1
-    dt_nengo = 0.001
+    dt = 0.001
     min_rate = 150
     max_rate = 200
     radius_bio = np.sqrt(2)
-    radius_pre = np.sqrt(2)
+    radius_pre = 12
     intercept_bio = 1
     n_syn = 1
     t_final = 1.0
@@ -37,8 +37,8 @@ def test_integrator_1d(Simulator, plt):
     plot_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/plots/'
 
     dim = 1
-    jl_dims = 0
-    jl_dim_mag = 1e-4
+    jl_dims = 3
+    jl_dim_mag = 1e-3
     reg = 0.1
 
     cutoff = 0.1
@@ -65,7 +65,7 @@ def test_integrator_1d(Simulator, plt):
         with nengo.Network(seed=network_seed) as network:
 
             if signal == 'sinusoids':
-                stim = nengo.Node(lambda t: np.cos(amp * t))
+                stim = nengo.Node(lambda t: amp * np.cos(amp * t))
                 # stim = nengo.Node(lambda t: amp * prime_sinusoids(t, dim, t_final, f_0=p_signal))
             elif signal == 'white_noise':
                 stim = nengo.Node(nengo.processes.WhiteSignal(
@@ -96,27 +96,27 @@ def test_integrator_1d(Simulator, plt):
                             weights_bias_conn=True,
                             seed=conn_seed,
                             synapse=tau,
-                            transform=amp*tau)
+                            transform=tau)
             nengo.Connection(pre, lif[0],
                             synapse=tau,
-                            transform=amp*tau)
-            # nengo.Connection(bio, bio,  # connect recurrently to normal and jl dims of bio
-            #                 synapse=tau,
-            #                 seed=conn_seed,
-            #                 n_syn=n_syn,
-            #                 solver=oracle_solver)
-            # nengo.Connection(lif, lif, synapse=tau)
-
-            nengo.Connection(stim, integral[0],  # feedforward
+                            transform=tau)
+            nengo.Connection(bio, bio,  # connect recurrently to normal and jl dims of bio
                             synapse=tau,
-                            transform=amp*tau)
-            # nengo.Connection(stim, integral,  # integrator
-            #                 synapse=1/s,
-            #                 transform=amp)
-            # nengo.Connection(integral, inter, synapse=None)
-            # nengo.Connection(inter, bio[:dim],  # oracle training connection
+                            seed=conn_seed,
+                            n_syn=n_syn,
+                            solver=oracle_solver)
+            nengo.Connection(lif, lif, synapse=tau)
+
+            # nengo.Connection(stim, integral[0],  # feedforward
             #                 synapse=tau,
-            #                 transform=w_train)
+            #                 transform=amp*tau)
+            nengo.Connection(stim, integral,  # integrator
+                            synapse=1/s,
+                            transform=1)
+            nengo.Connection(integral, inter, synapse=None)
+            nengo.Connection(inter, bio[:dim],  # oracle training connection
+                            synapse=tau,
+                            transform=w_train)
 
             probe_stim = nengo.Probe(stim, synapse=None)
             probe_lif = nengo.Probe(lif, synapse=tau)
@@ -129,11 +129,11 @@ def test_integrator_1d(Simulator, plt):
         Simulate the network, collect bioneuron activities and target values,
         and apply the oracle method to calculate recurrent decoders
         """
-        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
+        with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
             sim.run(t_final)
         lpf = nengo.Lowpass(tau)
-        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
         d_recurrent_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_integral])[0]
         if jl_dims > 0:
             d_full_new = np.hstack((d_recurrent_new, d_JL))
@@ -177,7 +177,7 @@ def test_integrator_1d(Simulator, plt):
         # import seaborn
         # columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder', 'x_dot_e')
         # df_list = []
-        # times = np.arange(dt_nengo, t_final, dt_nengo)
+        # times = np.arange(dt, t_final, dt)
         # for i in range(5):  # len(sim.data[bio.neurons])
         #     # encoder = bio.encoders[i][:dim]  # ignore JL_dims for decoding state
         #     encoder = sim.data[bio].encoders[i] ## including JL_dims
@@ -246,8 +246,6 @@ def test_integrator_1d(Simulator, plt):
         plot_dir=plot_dir)
 
     assert rmse_bio < cutoff
-    assert False
-
 
 
 def test_integrator_2d(Simulator, plt):
@@ -256,7 +254,7 @@ def test_integrator_2d(Simulator, plt):
     bio_neurons = 100
     tau = 0.1
     tau = 0.1
-    dt_nengo = 0.001
+    dt = 0.001
     min_rate = 150
     max_rate = 200
     n_syn = 1
@@ -394,11 +392,11 @@ def test_integrator_2d(Simulator, plt):
         Simulate the network, collect bioneuron activities and target values,
         and apply the oracle method to calculate recurrent decoders
         """
-        with Simulator(network, dt=dt_nengo, progress_bar=False, seed=sim_seed) as sim:
+        with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
             sim.run(t_final)
         lpf = nengo.Lowpass(tau)
-        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
         d_recurrent_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_integral])[0]
         if jl_dims > 0:
             d_full_new = np.hstack((d_recurrent_new, d_JL))
@@ -457,7 +455,7 @@ def test_integrator_2d(Simulator, plt):
         import seaborn
         columns = ('time', 'nrn', 'act_bio', 'act_lif', 'encoder_0', 'encoder_1', 'x_dot_e')
         df_list = []
-        times = np.arange(dt_nengo, t_final, dt_nengo)
+        times = np.arange(dt, t_final, dt)
         for i in range(5):  # len(sim.data[bio.neurons])
             encoder = sim.data[bio].encoders[i]  # including JL_dims
             for t, time in enumerate(times):
