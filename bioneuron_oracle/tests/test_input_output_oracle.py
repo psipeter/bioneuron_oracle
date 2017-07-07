@@ -8,13 +8,13 @@ from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input,
 
 # Nengo Parameters
 pre_neurons = 100
-bio_neurons = 20
+bio_neurons = 50
 post_neurons = 50
 tau_nengo = 0.05
 tau_neuron = 0.05
 dt_nengo = 0.001
-min_rate = 150
-max_rate = 200
+min_rate = 300
+max_rate = 400
 pre_seed = 3
 bio_seed = 6
 conn_seed = 9

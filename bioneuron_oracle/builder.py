@@ -342,7 +342,7 @@ def build_connection(model, conn):
                         w_ij = np.dot(d_in[pre], gain * encoder)
                         if conn.weights_bias_conn:
                             w_ij += w_bias[pre]
-                        w_ij = w_ij / conn.n_syn / k_norm * 15 #(15.0 / loc[pre, syn]) # TODO: better scaling heuristics
+                        w_ij = w_ij / conn.n_syn  / k_norm * loc[pre, syn] # TODO: better scaling heuristics
                         syn_weights[j, pre, syn] = w_ij
                         synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
@@ -360,18 +360,16 @@ def build_connection(model, conn):
         return nengo.builder.connection.build_connection(model, conn)
 
 def gen_encoders_gains_manual(n_neurons, dimensions, rng):
-    enc_mag = 1e+1  # todo: pass as parameter
-    gain_mag = 1e+2
+    enc_mag = 1e+0  # todo: pass as parameter
+    gain_mag = 1e+4
     encoders = rng.uniform(-enc_mag, enc_mag, size=(n_neurons, dimensions))
     # dist = nengo.dists.UniformHypersphere()
     # encoders = nengo.dists.get_samples(dist, n=n_neurons, d=dimensions, rng=rng)
     gains = rng.uniform(-gain_mag, gain_mag, size=n_neurons)
-    # gain_mag = 1e+1
-    # gains = rng.normal(0, gain_mag, size=n_neurons)
     return encoders, gains
 
 def gen_weights_bias_manual(pre_n_neurons, post_n_neurons, rng):
-    w_bias_mag = 1e-1
+    w_bias_mag = 1e-2  # todo: pass as parameter
     w_bias = rng.uniform(-w_bias_mag, w_bias_mag, size=(pre_n_neurons, post_n_neurons))
     return w_bias
 
