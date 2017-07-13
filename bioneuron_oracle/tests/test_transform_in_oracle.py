@@ -24,6 +24,7 @@ def test_transform_in_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 1.0
+	n_steps = 10
 
 	dim = 1
 	reg = 0.1
@@ -38,7 +39,7 @@ def test_transform_in_1d(Simulator, plt):
 		signal='sinusoids',
 		freq=1,
 		seeds=1,
-		transform=-0.5,
+		transform=1,
 		plot=False):
 
 		"""
@@ -51,6 +52,11 @@ def test_transform_in_1d(Simulator, plt):
 			elif signal == 'white_noise':
 				stim = nengo.Node(nengo.processes.WhiteSignal(
 					period=t_final, high=max_freq, rms=rms, seed=seeds))
+			elif signal == 'step':
+				stim = nengo.Node(lambda t:
+					np.linspace(-freq, freq, n_steps)[int((t % t_final)/(t_final/n_steps))])
+			elif signal == 'constant':
+				stim = nengo.Node(lambda t: freq)
 
 			pre = nengo.Ensemble(
 				n_neurons=pre_neurons,
@@ -157,7 +163,7 @@ def test_transform_in_1d(Simulator, plt):
 		signal='sinusoids',
 		tau=0.1,
 		tau_readout=0.1,
-		freq=1,
+		freq=1.0,
 		seeds=1,
 		transform=1.0,
 		t_final=t_final,
@@ -167,7 +173,7 @@ def test_transform_in_1d(Simulator, plt):
 		signal='sinusoids',
 		tau=0.1,
 		tau_readout=0.1,
-		freq=1,
+		freq=1.0,
 		seeds=1,
 		transform=1.0,
 		t_final=t_final,
@@ -197,7 +203,7 @@ def test_transform_in_2d(Simulator, plt):
 	rms = 0.5
 
 	dim = 2
-	reg = 0.01
+	reg = 0.1
 	t_final = 1.0
 	cutoff = 0.1
 
@@ -225,6 +231,8 @@ def test_transform_in_2d(Simulator, plt):
 					period=t_final, high=max_freq, rms=rms, seed=seeds[0]))
 				stim2 = nengo.Node(nengo.processes.WhiteSignal(
 					period=t_final, high=max_freq, rms=rms, seed=seeds[1]))
+			elif signal == 'constant':
+				stim = nengo.Node(lambda t: freq)
 
 			pre = nengo.Ensemble(
 				n_neurons=pre_neurons,

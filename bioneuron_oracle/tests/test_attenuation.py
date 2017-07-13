@@ -12,11 +12,10 @@ from nengo.utils.matplotlib import rasterplot
 
 from seaborn import set_palette, color_palette, tsplot
 
-from bioneuron_oracle import (BahlNeuron, prime_sinusoids, step_input, equalpower,
-	                          TrainedSolver, OracleSolver, spike_match_train)
+from bioneuron_oracle import (BahlNeuron, TrainedSolver, OracleSolver, spike_train)
 from bioneuron_oracle.builder import Bahl, ExpSyn
 
-def test_feedforward(Simulator, plt):
+def test_somatic_attenuation(Simulator, plt):
 
 	locations = np.arange(0,1,0.01)
 	weight = 1e-3
@@ -67,11 +66,11 @@ def test_feedforward(Simulator, plt):
 		%(slope, 'd', intercept, r_value**2))
 	plt.xlabel('$d_{apical}$')
 	# plt.ylabel('$\Delta V_{soma}$')
-	plt.ylabel('Somatic Attenuation ($\Delta V_{soma} \quad / \quad \Delta V_{soma}^{d=0}$)')
+	plt.ylabel('Somatic Attenuation \n($\Delta V_{soma} \quad / \quad \Delta V_{soma}^{d=0}$)')
 	plt.legend()
 
 
-def test_untrained_feedforward(Simulator, plt):
+def test_untrained_tuning_curves(Simulator, plt):
 
     """
     Naively assume that using the optimal decoders from pre
@@ -82,127 +81,199 @@ def test_untrained_feedforward(Simulator, plt):
     factor to account for the known attenuation that occurs for a 
     single spike traveling to the soma, which is approximated by
     v(d) = 1.0 - 0.355*d   ==>   attenuation(d) = 1/0.335 d = 2.817d
-    """
 
-    from bioneuron_oracle.builder import ExpSyn
-    import neuron
+    NOTE: only works when gains, biases, and encoders are generated from 
+    using the LIF methods in the builder
+    """
 
     # Nengo Parameters
     pre_neurons = 100
     bio_neurons = 2
-    tau_nengo = 0.05
-    tau_neuron = 0.05
-    dt_nengo = 0.001
+    dt = 0.001
     min_rate = 150
     max_rate = 200
-    pre_seed = 3
-    bio_seed = 6
-    conn_seed = 9
-    network_seed = 12
-    sim_seed = 15
-    t_final = 1.0
-    dim = 1
+    radius = 1
+    bio_radius = 1
     n_syn = 1
+
+    pre_seed = 1
+    bio_seed = 6
+    conn_seed = 3
+    network_seed = 4
+    sim_seed = 5
+    post_seed = 6
+    inter_seed = 7
+
     max_freq = 5
-    signal_seed  = 123
+    rms = 1.0
+    n_steps = 10
 
-    def sim(decoders_bio=None, decoders_bio2=None, plots=False):
+    dim = 1
+    reg = 0.1
+    t_final = 1.0
+    cutoff = 0.1
 
-        if decoders_bio is None:
-            decoders_bio = np.zeros((pre_neurons, dim))
-        if decoders_bio2 is None:
-            decoders_bio2 = np.zeros((pre_neurons, dim))
+    def sim(
+        d_readout=None,
+        d_ideal=None,
+        tau=0.01,
+        tau_readout=0.01,
+        t_final=1.0,
+        readout='LIF',
+        signal='sinusoids',
+        freq=1,
+        seeds=1,
+        transform=1,
+        plot=False):
 
+        """
+        Define the network
+        """
         with nengo.Network(seed=network_seed) as network:
+
+            if signal == 'sinusoids':
+                stim = nengo.Node(lambda t: np.cos(2 * np.pi * freq * t))
+            elif signal == 'white_noise':
+                stim = nengo.Node(nengo.processes.WhiteSignal(
+                    period=t_final, high=max_freq, rms=rms, seed=seeds))
+            elif signal == 'step':
+                stim = nengo.Node(lambda t:
+                    np.linspace(-freq, freq, n_steps)[int((t % t_final)/(t_final/n_steps))])
+            elif signal == 'constant':
+                stim = nengo.Node(lambda t: freq)
+
+            pre = nengo.Ensemble(
+                n_neurons=pre_neurons,
+                dimensions=dim,
+                seed=pre_seed,
+                neuron_type=nengo.LIF(),
+                radius=radius,
+                label='pre')
+            bio = nengo.Ensemble(
+                n_neurons=bio_neurons,
+                dimensions=dim,
+                seed=bio_seed,
+                neuron_type=BahlNeuron(),
+                # neuron_type=nengo.LIF(),
+                radius=bio_radius,
+                max_rates=nengo.dists.Uniform(min_rate, max_rate),
+                label='bio')
+            lif = nengo.Ensemble(
+                n_neurons=bio.n_neurons,
+                dimensions=bio.dimensions,
+                seed=bio.seed,
+                max_rates=nengo.dists.Uniform(min_rate, max_rate),
+                radius=bio.radius,
+                neuron_type=nengo.LIF(),
+                label='lif')
+            oracle = nengo.Node(size_in=dim)
+
             """
-            Simulate a feedforward network [stim]-[LIF]-[BIO]
-            and compare to [stim]-[LIF]-[LIF].
+            The OracleSolver is used to manually set weights,
+            and no training is occuring
             """
+            pre_bio_solver = OracleSolver(decoders_bio = d_ideal)
 
-            stim1 = nengo.Node(
-                # lambda t: 0.25 * equalpower(t, dt_nengo, t_final, max_freq, dim,
-                #                       mean=0.0, std=1.0, seed=signal_seed))
-                lambda t: prime_sinusoids(t, dim, t_final))
+            nengo.Connection(stim, pre, synapse=None)
+            conn_bio = nengo.Connection(pre, bio,
+                weights_bias_conn=True,
+                seed=conn_seed,
+                synapse=tau,
+                transform=transform)
+            conn_ideal = nengo.Connection(pre, lif,
+                synapse=tau,
+                transform=transform)
+            nengo.Connection(stim, oracle,
+                synapse=tau,
+                transform=transform)
 
-            # stim2 = nengo.Node(
-                # lambda t: 0.25 * equalpower(t, dt_nengo, t_final, max_freq, dim,
-                #                       mean=0.0, std=1.0, seed=2*signal_seed))
-                # lambda t: prime_sinusoids(t, 2*dim, t_final)[dim:2*dim])
-
-            pre = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-                                 seed=pre_seed, neuron_type=nengo.LIF(),
-                                 label='pre1')
-            # pre2 = nengo.Ensemble(n_neurons=pre_neurons, dimensions=dim,
-            #                      seed=2*pre_seed, neuron_type=nengo.LIF(),
-            #                      label='pre2')
-            bio = nengo.Ensemble(n_neurons=bio_neurons, dimensions=dim,
-                                 seed=bio_seed, neuron_type=BahlNeuron(),
-                                 max_rates=nengo.dists.Uniform(min_rate, max_rate),
-                                 intercepts=nengo.dists.Uniform(-1, 1),
-                                 label='bio')
-            lif = nengo.Ensemble(n_neurons=bio.n_neurons, dimensions=bio.dimensions,
-                                 seed=bio.seed, neuron_type=nengo.LIF(),
-                                 max_rates=bio.max_rates, intercepts=bio.intercepts)
-            direct = nengo.Ensemble(n_neurons=1, dimensions=dim,
-                                neuron_type=nengo.Direct())
-
-            oracle_solver = OracleSolver(decoders_bio=decoders_bio)
-            # oracle_solver2 = OracleSolver(decoders_bio=decoders_bio2)
-
-            nengo.Connection(stim1, pre, synapse=None)
-            # nengo.Connection(stim2, pre2, synapse=None)
-            conn_in = nengo.Connection(pre, bio,
-                             synapse=tau_neuron,
-                             n_syn=n_syn,
-                             seed=conn_seed,
-                             weights_bias_conn=True,
-                             solver=oracle_solver)  # set decoders manually
-            # conn_in2 = nengo.Connection(pre2, bio,
-            #                  synapse=tau_neuron,
-            #                  n_syn=n_syn,
-            #                  # weights_bias_conn=True,
-            #                  solver=oracle_solver2)  # set decoders manually
-            conn_ideal = nengo.Connection(pre, lif, synapse=tau_nengo)
-            # conn_ideal2 = nengo.Connection(pre2, lif, synapse=tau_nengo)
-            nengo.Connection(stim1, direct, synapse=tau_nengo)
-            # nengo.Connection(stim2, direct, synapse=tau_nengo)
-
-            probe_stim = nengo.Probe(stim1, synapse=None)
-            probe_pre = nengo.Probe(pre, synapse=tau_nengo)
-            probe_lif = nengo.Probe(lif, synapse=tau_nengo)
-            probe_direct = nengo.Probe(direct, synapse=tau_nengo)
-            probe_pre_spikes = nengo.Probe(pre.neurons, 'spikes')
+            probe_stim = nengo.Probe(stim, synapse=None)
+            probe_pre = nengo.Probe(pre, synapse=tau_readout)
+            probe_lif = nengo.Probe(lif, synapse=tau_readout, solver=nengo.solvers.LstsqL2(reg=reg))
             probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
             probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
-            probe_lif_voltage = nengo.Probe(lif.neurons, 'voltage')
+            probe_oracle = nengo.Probe(oracle, synapse=tau_readout)
 
-        with Simulator(network, dt=dt_nengo, seed=sim_seed) as sim:
+
+        """
+        Simulate the network, collect bioneuron activities and target values,
+        and apply the oracle method to calculate readout decoders
+        """
+        with Simulator(network, dt=dt, seed=sim_seed) as sim:
+            """
+            Modulate the synaptic weights by dendritic location to account for
+            dendritic attenuation, and undo the multiplications in builder.build_connection()
+            """
+            times = np.arange(0, 1.0, 0.001)  # to 1s by dt=0.001
+            k_norm = np.linalg.norm(np.exp((-times/tau)),1)
             for nrn in sim.data[bio.neurons]:
                 for conn_pre in nrn.synapses.iterkeys():
                     for pre in range(nrn.synapses[conn_pre].shape[0]):
                         for syn in range(nrn.synapses[conn_pre][pre].shape[0]):
                             synapse = nrn.synapses[conn_pre][pre][syn]
                             # if plots: print 'weight before', synapse.weight
-                            w_new = synapse.weight * synapse.loc * 2.817
+                            w_new = synapse.weight * synapse.loc * 2.817 * k_norm
                             nrn.synapses[conn_pre][pre][syn] = ExpSyn(
                                 nrn.cell.apical(synapse.loc), w_new, synapse.tau, synapse.loc)
                             # if plots: print 'weight after', nrn.synapses[conn_pre][pre][syn].weight
             neuron.init()
             sim.run(t_final)
 
-        decoders_ideal = sim.data[conn_ideal].weights.T
-        # decoders_ideal2 = sim.data[conn_ideal2].weights.T
-        decoders_ideal2 = decoders_bio2
+        lpf = nengo.Lowpass(tau_readout)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
+        d_ideal_new = sim.data[conn_ideal].weights.T
 
-        if plots:
-            plt.subplot(1,1,1)
-            # copy tuning curve plotting from above
+        """
+        Calculate readout decoders by either
+            - grabbing the ideal decoders from the LIF population, OR
+            - applying the oracle method (simulate, collect spikes and target, solver)
+        """
+        if readout == 'LIF':
+            d_readout_new = sim.data[conn_ideal].weights.T
+        elif readout == 'oracle':
+            d_readout_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle])[0]
+
+        """
+        Use the old readout decoders to estimate the bioneurons' outputs for plotting
+        """
+        if plot == 'signals':
+            xhat_bio = np.dot(act_bio, d_readout)
+            xhat_lif = sim.data[probe_lif]
+            rmse_bio = rmse(sim.data[probe_oracle][:,0], xhat_bio[:,0])
+            rmse_lif = rmse(sim.data[probe_oracle], xhat_lif)
+            error_bio = xhat_bio[:,0]-sim.data[probe_oracle][:,0]
+            error_lif = xhat_lif[:,0]-sim.data[probe_oracle][:,0]
+            f_plot = np.fft.fftfreq(sim.trange().shape[-1])
+            dft_bio = np.fft.fft(error_bio)             
+            dft_lif = np.fft.fft(error_lif)  
+            plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            plt.plot(sim.trange(), xhat_lif[:,0], label='lif, rmse=%.5f' % rmse_lif)
+            plt.plot(sim.trange(), sim.data[probe_oracle][:,0], label='oracle')
+            plt.xlabel('time (s)')
+            plt.ylabel('$\hat{x}(t)$')
+            plt.legend()
+
+        """
+        Plot tuning curves with the old ideal decoders
+        """
+        # if plot == 'seaborn_tuning_curves':
+        #     import pandas
+        #     columns = ('x_dot_e_bio', 'x_dot_e_lif', 'neuron')
+        #     df = pandas.DataFrame(columns=columns)
+        #     n_eval_points = 20
+        #     j=0
+        #     for i in range(bio.n_neurons):
+        #         e_bio = bio.encoders[i]
+        #         e_lif = sim.data[lif].encoders[i]
+        #         for t, time in enumerate(sim.trange()):
+        #             x = sim.data[probe_pre][t, 0]
+        #             x_dot_e_bio = np.dot(x, e_bio)
+        #             x_dot_e_lif = np.dot(x, e_lif)
+        #             df.loc[j] = [x_dot_e_bio, x_dot_e_lif, i]
+
+        if plot == 'tuning curves':
             n_eval_points = 20
-            cutoff = 10.0
-
-            lpf = nengo.Lowpass(tau_nengo)
-            act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt_nengo)
-            act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt_nengo)
             rmses_act = np.array([rmse(act_bio[:,i], act_lif[:,i])
                                  for i in range(bio.n_neurons)])
 
@@ -233,25 +304,346 @@ def test_untrained_feedforward(Simulator, plt):
                     if ts.shape[0] > 1: Hz_stddev_lif[xi] = np.std(act_lif[ts, i])
 
                 rmse_tuning_curve = rmse(Hz_mean_bio[:-2], Hz_mean_lif[:-2])
-                bioplot = plt.errorbar(x_dot_e_vals_bio[:-2], Hz_mean_bio[:-2],
-                             yerr=Hz_stddev_bio[:-2], fmt='-o',
-                             label='BIO %s, RMSE=%.5f' % (i, rmse_tuning_curve))
-                lifplot = plt.errorbar(x_dot_e_vals_lif[:-2], Hz_mean_lif[:-2],
-                             yerr=Hz_stddev_lif[:-2], fmt='--', label='LIF %s' % i,
-                             color=bioplot[0].get_color())
-                lifplot[-1][0].set_linestyle('--')
+                bioplot = plt.plot(x_dot_e_vals_bio[:-2], Hz_mean_bio[:-2],
+                    marker='o',
+                    label='bio %s, RMSE=%.1f' % (i, rmse_tuning_curve))
+                plt.fill_between(x_dot_e_vals_bio[:-2],
+                    Hz_mean_bio[:-2]+Hz_stddev_bio[:-2],
+                    Hz_mean_bio[:-2]-Hz_stddev_bio[:-2],
+                    alpha=0.5,
+                    facecolor=bioplot[0].get_color())
+                lifplot = plt.plot(x_dot_e_vals_lif[:-2], Hz_mean_lif[:-2],
+                    label='ideal',
+                    color=bioplot[0].get_color(),
+                    ls='dotted')
+                plt.fill_between(x_dot_e_vals_lif[:-2],
+                    Hz_mean_lif[:-2]+Hz_stddev_lif[:-2],
+                    Hz_mean_lif[:-2]-Hz_stddev_lif[:-2],
+                    alpha=0.2,
+                    facecolor=lifplot[0].get_color())
+
+            plt.ylim(ymin=0)
             plt.xlabel('$x \cdot e$')
             plt.ylabel('firing rate')
             plt.title('Tuning Curves')
             plt.legend()
 
+        return d_ideal_new, d_readout_new
 
-            assert rmse_tuning_curve < cutoff
 
-        return decoders_ideal, decoders_ideal2  
+    d_ideal_init = np.zeros((bio_neurons, dim))
+    d_readout_init = np.zeros((bio_neurons, dim))
 
-    decoders_ideal, decoders_ideal2 = sim(decoders_bio=None, decoders_bio2=None, plots=False)
-    decoders_ideal, decoders_ideal2 = sim(decoders_bio=decoders_ideal, decoders_bio2=decoders_ideal2, plots=True)
+    d_ideal_new, d_readout_new = sim(
+        d_ideal=d_ideal_init,
+        d_readout=d_readout_init,
+        signal='sinusoids',
+        tau=0.01,
+        tau_readout=0.01,
+        freq=1.0,
+        seeds=1,
+        transform=1.0,
+        t_final=t_final,
+        plot=False)
+    d_ideal_extra, d_readout_extra = sim(
+        d_ideal=d_ideal_new,
+        d_readout=d_readout_new,
+        signal='sinusoids',
+        tau=0.01,
+        tau_readout=0.01,
+        freq=1.0,
+        seeds=1,
+        transform=1.0,
+        t_final=10*t_final,
+        plot='tuning curves')
+
+    # assert rmse_bio < cutoff
+
+
+
+def test_trained_tuning_curves(Simulator, plt):
+
+    """
+    Train synaptic weights using spike_train and see how well they match
+
+    NOTE: only works when gains, biases, and encoders are generated from 
+    using the LIF methods in the builder
+    """
+
+    # Nengo Parameters
+    pre_neurons = 100
+    bio_neurons = 2
+    tau = 0.01
+    tau_readout = 0.01
+    dt = 0.001
+    min_rate = 150
+    max_rate = 200
+    radius = 1
+    bio_radius = 1
+    n_syn = 1
+
+    pre_seed = 1
+    bio_seed = 6
+    conn_seed = 3
+    network_seed = 4
+    sim_seed = 5
+    post_seed = 6
+    inter_seed = 7
+
+    max_freq = 5
+    rms = 1.0
+
+    dim = 1
+    reg = 0.1
+    t_final = 1.0
+    cutoff = 0.1
+
+    evo_params = {
+        'dt': dt,
+        'tau_readout': tau_readout,
+        'sim_seed': sim_seed,
+        'n_processes': 10,
+        'popsize': 100,
+        'generations' : 20,
+        'w_0': 1e-1,
+        'delta_w' :1e-1,
+        'evo_seed' :1,
+        'evo_t_final' :1.0,
+        'evo_cutoff' :50.0,
+    }
+
+    def sim(
+        w_pre_bio,
+        d_readout,
+        evo_params,
+        readout = 'LIF',
+        signal='sinusoids',
+        t_final=1.0,
+        freq=1,
+        seeds=1,
+        transform=1,
+        train=False,
+        plot=False):
+
+        """
+        Define the network
+        """
+        with nengo.Network(seed=network_seed) as network:
+
+            if signal == 'sinusoids':
+                stim = nengo.Node(lambda t: np.cos(2 * np.pi * freq * t))
+            elif signal == 'white_noise':
+                stim = nengo.Node(nengo.processes.WhiteSignal(
+                    period=t_final, high=max_freq, rms=rms, seed=seeds))
+            elif signal == 'step':
+                stim = nengo.Node(lambda t:
+                    np.linspace(-freq, freq, n_steps)[int((t % t_final)/(t_final/n_steps))])
+            elif signal == 'constant':
+                stim = nengo.Node(lambda t: freq)
+
+            pre = nengo.Ensemble(
+                n_neurons=pre_neurons,
+                dimensions=dim,
+                seed=pre_seed,
+                neuron_type=nengo.LIF(),
+                radius=radius,
+                label='pre')
+            bio = nengo.Ensemble(
+                n_neurons=bio_neurons,
+                dimensions=dim,
+                seed=bio_seed,
+                neuron_type=BahlNeuron(),
+                # neuron_type=nengo.LIF(),
+                radius=bio_radius,
+                max_rates=nengo.dists.Uniform(min_rate, max_rate),
+                label='bio')
+            lif = nengo.Ensemble(
+                n_neurons=bio.n_neurons,
+                dimensions=bio.dimensions,
+                seed=bio.seed,
+                max_rates=nengo.dists.Uniform(min_rate, max_rate),
+                radius=bio.radius,
+                neuron_type=nengo.LIF(),
+                label='lif')
+            oracle = nengo.Node(size_in=dim)
+            temp = nengo.Node(size_in=dim)
+
+            pre_bio_solver = TrainedSolver(weights_bio = w_pre_bio)
+
+            nengo.Connection(stim, pre, synapse=None)
+            pre_bio = nengo.Connection(pre, bio,
+                seed=conn_seed,
+                synapse=tau,
+                transform=transform,
+                trained_weights=True,
+                solver = pre_bio_solver,
+                n_syn=n_syn)
+            conn_ideal = nengo.Connection(pre, lif,
+                synapse=tau,
+                transform=transform)
+            nengo.Connection(stim, oracle,
+                synapse=tau,
+                transform=transform)
+            conn_lif = nengo.Connection(lif, temp,
+                synapse=tau,
+                solver=nengo.solvers.LstsqL2(reg=reg))
+
+            probe_stim = nengo.Probe(stim, synapse=None)
+            probe_pre = nengo.Probe(pre, synapse=tau_readout)
+            probe_lif = nengo.Probe(lif, synapse=tau_readout, solver=nengo.solvers.LstsqL2(reg=reg))
+            probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+            probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
+            probe_oracle = nengo.Probe(oracle, synapse=tau_readout)
+
+
+        """
+        Perform spike-match training on the pre-bio weights
+        """
+        if train:
+            network = spike_train(network, evo_params, plots=False)
+            w_pre_bio_new = pre_bio.solver.weights_bio
+        else:
+            w_pre_bio_new = w_pre_bio
+
+        """
+        Run the simulation with the new w_pre_bio
+        """
+        with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
+            sim.run(t_final)
+        lpf = nengo.Lowpass(tau_readout)
+        act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
+        act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
+
+        """
+        Calculate readout decoders by either
+            - grabbing the ideal decoders from the LIF population, OR
+            - applying the oracle method (simulate, collect spikes and target, solver)
+        """
+        if readout == 'LIF':
+            d_readout_new = sim.data[conn_lif].weights.T
+        elif readout == 'oracle':
+            d_readout_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle])[0]
+
+
+        """
+        Use the old readout decoders to estimate the bioneurons' outputs for plotting
+        """
+        if plot == 'signals':
+            xhat_bio = np.dot(act_bio, d_readout)
+            xhat_lif = sim.data[probe_lif]
+            rmse_bio = rmse(sim.data[probe_oracle][:,0], xhat_bio[:,0])
+            rmse_lif = rmse(sim.data[probe_oracle], xhat_lif)
+            error_bio = xhat_bio[:,0]-sim.data[probe_oracle][:,0]
+            error_lif = xhat_lif[:,0]-sim.data[probe_oracle][:,0]
+            f_plot = np.fft.fftfreq(sim.trange().shape[-1])
+            dft_bio = np.fft.fft(error_bio)             
+            dft_lif = np.fft.fft(error_lif)  
+            plt.plot(sim.trange(), xhat_bio[:,0], label='bio, rmse=%.5f' % rmse_bio)
+            plt.plot(sim.trange(), xhat_lif[:,0], label='lif, rmse=%.5f' % rmse_lif)
+            plt.plot(sim.trange(), sim.data[probe_oracle][:,0], label='oracle')
+            plt.xlabel('time (s)')
+            plt.ylabel('$\hat{x}(t)$')
+            plt.legend()
+
+        """
+        Plot tuning curves with the trained weights
+        """
+        if plot == 'tuning curves':
+            n_eval_points = 20
+            rmses_act = np.array([rmse(act_bio[:,i], act_lif[:,i])
+                                 for i in range(bio.n_neurons)])
+
+            for i in range(bio.n_neurons):
+                x_dot_e_bio = np.dot(sim.data[probe_pre], bio.encoders[i])
+                x_dot_e_lif = np.dot(sim.data[probe_pre], sim.data[lif].encoders[i])
+                x_dot_e_vals_bio = np.linspace(np.min(x_dot_e_bio),
+                                               np.max(x_dot_e_bio), 
+                                               num=n_eval_points)
+                x_dot_e_vals_lif = np.linspace(np.min(x_dot_e_lif),
+                                               np.max(x_dot_e_lif), 
+                                               num=n_eval_points)
+                Hz_mean_bio = np.zeros((x_dot_e_vals_bio.shape[0]))
+                Hz_stddev_bio = np.zeros_like(Hz_mean_bio)
+                Hz_mean_lif = np.zeros((x_dot_e_vals_lif.shape[0]))
+                Hz_stddev_lif = np.zeros_like(Hz_mean_lif)
+                for xi in range(x_dot_e_vals_bio.shape[0] - 1):
+                    ts_greater = np.where(x_dot_e_vals_bio[xi] < sim.data[probe_pre])[0]
+                    ts_smaller = np.where(sim.data[probe_pre] < x_dot_e_vals_bio[xi + 1])[0]
+                    ts = np.intersect1d(ts_greater, ts_smaller)
+                    if ts.shape[0] > 0: Hz_mean_bio[xi] = np.average(act_bio[ts, i])
+                    if ts.shape[0] > 1: Hz_stddev_bio[xi] = np.std(act_bio[ts, i])
+                for xi in range(x_dot_e_vals_lif.shape[0] - 1):
+                    ts_greater = np.where(x_dot_e_vals_lif[xi] < sim.data[probe_pre])[0]
+                    ts_smaller = np.where(sim.data[probe_pre] < x_dot_e_vals_lif[xi + 1])[0]
+                    ts = np.intersect1d(ts_greater, ts_smaller)
+                    if ts.shape[0] > 0: Hz_mean_lif[xi] = np.average(act_lif[ts, i])
+                    if ts.shape[0] > 1: Hz_stddev_lif[xi] = np.std(act_lif[ts, i])
+
+                rmse_tuning_curve = rmse(Hz_mean_bio[:-2], Hz_mean_lif[:-2])
+                bioplot = plt.plot(x_dot_e_vals_bio[:-2], Hz_mean_bio[:-2],
+                    marker='o',
+                    label='bio %s, RMSE=%.1f' % (i, rmse_tuning_curve))
+                plt.fill_between(x_dot_e_vals_bio[:-2],
+                    Hz_mean_bio[:-2]+Hz_stddev_bio[:-2],
+                    Hz_mean_bio[:-2]-Hz_stddev_bio[:-2],
+                    alpha=0.5,
+                    facecolor=bioplot[0].get_color())
+                lifplot = plt.plot(x_dot_e_vals_lif[:-2], Hz_mean_lif[:-2],
+                    label='ideal',
+                    color=bioplot[0].get_color(),
+                    ls='dotted')
+                plt.fill_between(x_dot_e_vals_lif[:-2],
+                    Hz_mean_lif[:-2]+Hz_stddev_lif[:-2],
+                    Hz_mean_lif[:-2]-Hz_stddev_lif[:-2],
+                    alpha=0.2,
+                    facecolor=lifplot[0].get_color())
+
+            plt.ylim(ymin=0)
+            plt.xlabel('$x \cdot e$')
+            plt.ylabel('firing rate')
+            plt.title('Tuning Curves')
+            plt.legend()
+
+        return w_pre_bio_new, d_readout_new
+
+
+    """
+    Run the test
+    """
+    weight_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/weights/'
+    weight_filename = 'w_trained_tuning_curves_pre_to_bio_freq=%s.npz' % 1
+    try:
+        w_pre_bio_init = np.load(weight_dir+weight_filename)['weights_bio']
+        to_train = False
+    except IOError:
+        w_pre_bio_init = np.zeros((bio_neurons, pre_neurons, n_syn))
+        to_train = True
+    d_readout_init = np.zeros((bio_neurons, dim))
+
+    w_pre_bio_new, d_readout_new = sim(
+        w_pre_bio=w_pre_bio_init,
+        d_readout=d_readout_init,
+        evo_params=evo_params,
+        signal='sinusoids',
+        freq=1,
+        seeds=1,
+        transform=1,
+        t_final=t_final,
+        train=to_train,
+        plot=False)
+    w_pre_bio_extra, d_readout_extra = sim(
+        w_pre_bio=w_pre_bio_new,
+        d_readout=d_readout_new,
+        evo_params=evo_params,
+        signal='sinusoids',
+        freq=1,
+        seeds=1,
+        transform=1,
+        t_final=10*t_final,
+        train=False,
+        plot='tuning curves')
+
+    np.savez(weight_dir+weight_filename, weights_bio=w_pre_bio_new)
 
 
 # def test_pairwise(plt):

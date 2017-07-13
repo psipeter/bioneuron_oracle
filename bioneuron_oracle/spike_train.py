@@ -182,7 +182,8 @@ def spike_train(network, params, method="1-N", plots=False):
 			for p in range(popsize):
 				w_pop_new.append(dict())
 				for conn in w_pop[p].iterkeys():
-					w_mutate = rng.normal(0, delta_w, size=w_best[conn].shape)
+					decay = np.exp(-g / 10)  # decay of mutation rate over generations
+					w_mutate = rng.normal(0, delta_w*decay, size=w_best[conn].shape)
 					w_pop_new[p][conn] = w_best[conn] + w_mutate
 			w_pop = copy.copy(w_pop_new)
 

@@ -3,13 +3,13 @@ import nengo
 from nengo.utils.numpy import rmse
 from bioneuron_oracle import BahlNeuron, OracleSolver
 
-def test_bio_to_bio(Simulator, plt):
+def test_bio_to_bio_1d(Simulator, plt):
 	# Nengo Parameters
 	pre_neurons = 100
 	bio_neurons = 100
 	bio2_neurons = 100
 	tau = 0.1
-	tau_readout = 0.01
+	tau_readout = 0.1
 	dt = 0.001
 	min_rate = 150
 	max_rate = 200
@@ -30,8 +30,8 @@ def test_bio_to_bio(Simulator, plt):
 	rms = 0.5
 
 	dim = 1
-	reg = 0.01
-	t_final = 0.5
+	reg = 0.1
+	t_final = 1.0
 	cutoff = 0.1
 
 	def sim(
@@ -68,7 +68,8 @@ def test_bio_to_bio(Simulator, plt):
 				n_neurons=bio_neurons,
 				dimensions=dim,
 				seed=bio_seed,
-				neuron_type=BahlNeuron(),
+				# neuron_type=BahlNeuron(),
+				neuron_type=nengo.LIF(),
 				label='bio')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
@@ -81,7 +82,8 @@ def test_bio_to_bio(Simulator, plt):
 				n_neurons=bio_neurons,
 				dimensions=dim,
 				seed=bio2_seed,
-				neuron_type=BahlNeuron(),
+				# neuron_type=BahlNeuron(),
+				neuron_type=nengo.LIF(),
 				label='bio2')
 			lif2 = nengo.Ensemble(
 				n_neurons=bio2.n_neurons,
@@ -242,8 +244,8 @@ def test_bio_to_bio_2d(Simulator, plt):
 	rms = 0.5
 
 	dim = 2
-	reg = 0.01
-	t_final = 0.5
+	reg = 0.1
+	t_final = 1.0
 	cutoff = 0.1
 
 	def sim(
@@ -283,7 +285,8 @@ def test_bio_to_bio_2d(Simulator, plt):
 				n_neurons=bio_neurons,
 				dimensions=dim,
 				seed=bio_seed,
-				neuron_type=BahlNeuron(),
+				# neuron_type=BahlNeuron(),
+				neuron_type=nengo.LIF(),
 				label='bio')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
@@ -291,13 +294,13 @@ def test_bio_to_bio_2d(Simulator, plt):
 				seed=bio.seed,
 				neuron_type=nengo.LIF(),
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
-				radius=radius,
 				label='lif')
 			bio2 = nengo.Ensemble(
 				n_neurons=bio_neurons,
 				dimensions=dim,
 				seed=bio2_seed,
-				neuron_type=BahlNeuron(),
+				# neuron_type=BahlNeuron(),
+				neuron_type=nengo.LIF(),
 				label='bio2')
 			lif2 = nengo.Ensemble(
 				n_neurons=bio2.n_neurons,
@@ -305,7 +308,6 @@ def test_bio_to_bio_2d(Simulator, plt):
 				seed=bio2.seed,
 				neuron_type=nengo.LIF(),
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
-				radius=radius,
 				label='lif2')
 			oracle = nengo.Node(size_in=dim)
 			oracle2 = nengo.Node(size_in=dim)

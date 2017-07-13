@@ -168,17 +168,17 @@ def build_bahlneuron(model, neuron_type, neurons):
     if (not hasattr(ens, 'encoders') or
             not isinstance(ens.encoders, np.ndarray)):
         rng = np.random.RandomState(seed=ens.seed)
-        encoders, gains = gen_encoders_gains_manual(
-            ens.n_neurons,
-            ens.dimensions,
-            rng)
-        # encoders, gains = gen_encoders_gains_LIF(
+        # encoders, gains = gen_encoders_gains_manual(
         #     ens.n_neurons,
         #     ens.dimensions,
-        #     ens.max_rates,
-        #     ens.intercepts,
-        #     ens.radius,
-        #     ens.seed)
+        #     rng)
+        encoders, gains = gen_encoders_gains_LIF(
+            ens.n_neurons,
+            ens.dimensions,
+            ens.max_rates,
+            ens.intercepts,
+            ens.radius,
+            ens.seed)
         ens.encoders = encoders
         ens.gain = gains
         ens.bias = np.zeros_like(gains)
@@ -252,23 +252,23 @@ def build_connection(model, conn):
 
         # emulated biases in weight space
         if conn.weights_bias_conn:
-            weights_bias = gen_weights_bias_manual(
-                conn_pre.n_neurons,
-                conn_post.n_neurons,
-                rng)
-            # weights_bias = gen_weights_bias_LIF(
+            # weights_bias = gen_weights_bias_manual(
             #     conn_pre.n_neurons,
-            #     conn_pre.dimensions,
-            #     conn_pre.max_rates,
-            #     conn_pre.intercepts,
-            #     conn_pre.radius,
-            #     conn_pre.seed,
             #     conn_post.n_neurons,
-            #     conn_post.dimensions,
-            #     conn_post.max_rates,
-            #     conn_post.intercepts,
-            #     conn_post.radius,
-            #     conn_post.seed)
+            #     rng)
+            weights_bias = gen_weights_bias_LIF(
+                conn_pre.n_neurons,
+                conn_pre.dimensions,
+                conn_pre.max_rates,
+                conn_pre.intercepts,
+                conn_pre.radius,
+                conn_pre.seed,
+                conn_post.n_neurons,
+                conn_post.dimensions,
+                conn_post.max_rates,
+                conn_post.intercepts,
+                conn_post.radius,
+                conn_post.seed)
 
         # Grab decoders from this connections OracleSolver
         # TODO: fails for slicing into TrainedSolver (?)
@@ -342,7 +342,7 @@ def build_connection(model, conn):
                         w_ij = np.dot(d_in[pre], gain * encoder)
                         if conn.weights_bias_conn:
                             w_ij += w_bias[pre]
-                        w_ij = w_ij / conn.n_syn  / k_norm * loc[pre, syn] # TODO: better scaling heuristics
+                        w_ij = w_ij / conn.n_syn / k_norm
                         syn_weights[j, pre, syn] = w_ij
                         synapse = ExpSyn(section, w_ij, tau, loc[pre, syn])
                         bahl.synapses[conn_pre][pre][syn] = synapse
