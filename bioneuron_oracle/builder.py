@@ -216,8 +216,9 @@ def build_connection(model, conn):
                 not isinstance(conn.solver, TrainedSolver) and
                 conn_post.label != 'temp_sub_spike_match'):  # TODO: less hacky
             raise BuildError("Connections from bioneurons must provide "
-                             "a OracleSolver or TrainedSolver (got %s)"
-                             % conn.solver)
+                             "a OracleSolver or TrainedSolver"
+                            " (got %s from %s to %s)"
+                             % (conn.solver, conn_pre, conn_post))
 
     if isinstance(conn_post, nengo.Ensemble) and \
        isinstance(conn_post.neuron_type, BahlNeuron):
@@ -319,7 +320,7 @@ def build_connection(model, conn):
         else:  # oracle weights
             for j, bahl in enumerate(neurons):
                 assert isinstance(bahl, Bahl)
-                d_in = weights.T
+                d_in = 1e+2 * weights.T
                 loc = syn_loc[j]
                 if conn.weights_bias_conn:
                     w_bias = weights_bias[:, j]
@@ -438,7 +439,7 @@ def gen_weights_bias_LIF(pre_n_neurons,
     # Desired output function Y -- just repeat "bias" m times
     Y = np.tile(biases, (pre_activities.shape[0], 1))
     # TODO: check weights vs decoders
-    weights_bias, unused_info = nengo.solvers.LstsqL2(reg=0.01)(pre_activities, Y)
+    weights_bias = 7e+1 * nengo.solvers.LstsqL2(reg=0.01)(pre_activities, Y)[0]
     return weights_bias
 
 
