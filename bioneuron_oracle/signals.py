@@ -1,7 +1,99 @@
 import numpy as np
+import nengo
+from nengolib.signal import s, z
 
-__all__ = ['prime_sinusoids', 'step_input', 'equalpower']
+__all__ = ['prime_sinusoids', 'step_input', 'equalpower', 'get_signal', 'get_stim_deriv']
 
+
+def get_signal(
+    signal_type,
+    network_seed=1,
+    sim_seed=1,
+    freq=1,
+    seeds=1,
+    t_transient=1.0,
+    t_final=1.0,
+    max_freq=1,
+    rms=1,
+    tau=0.1,
+    dt=0.001):
+
+    with nengo.Network(seed=network_seed) as network:
+        if signal_type == 'sinusoids':
+            stim = nengo.Node(lambda t: 
+                np.cos(2 * np.pi * freq * (t-1)))
+        elif signal_type == 'white_noise':
+            stim = nengo.Node(nengo.processes.WhiteSignal(
+                period=t_final, high=max_freq, rms=rms, seed=seeds))
+        deriv = nengo.Node(size_in=1)
+        nengo.Connection(stim, deriv, synapse=(1.0 - ~z) / dt)
+        p_stim = nengo.Probe(stim, synapse=None)
+        p_deriv = nengo.Probe(deriv, synapse=None)
+    with nengo.Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
+        sim.run(t_final)
+    transient = np.array(0.0 * np.arange(0, t_transient+dt, dt))
+    stimulus = np.hstack((transient, sim.data[p_stim][:,0]))
+    derivative = np.hstack((transient, sim.data[p_deriv][:,0]))
+    return stimulus, derivative
+
+def get_stim_deriv(
+    signal,
+    order=1,
+    network_seed=1,
+    sim_seed=1,
+    freq=1,
+    seeds=1,
+    t_final=1.0,
+    max_freq=1,
+    rms=1,
+    tau=0.1,
+    dt=0.001):
+
+    with nengo.Network(seed=network_seed) as network:
+        if signal == 'sinusoids':
+            stim = nengo.Node(lambda t: 
+                np.cos(2 * np.pi * freq * (t-1)))
+        elif signal == 'white_noise':
+            stim = nengo.Node(nengo.processes.WhiteSignal(
+                period=t_final, high=max_freq, rms=rms, seed=seeds))
+        deriv_node = nengo.Node(size_in=1)
+        nengo.Connection(stim, deriv_node, synapse=((1.0 - ~z) / dt)**order)
+        deriv_probe = nengo.Probe(deriv_node, synapse=tau)
+    with nengo.Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
+        sim.run(t_final)
+    deriv_signal = sim.data[deriv_probe]
+    deriv_mag = max(abs(np.min(deriv_signal)), abs(np.max(deriv_signal)))
+    deriv_trans = 1.0 / deriv_mag
+    return deriv_trans
+
+def get_stim_extra(
+    signal,
+    network_seed=1,
+    sim_seed=1,
+    freq=1,
+    seeds=1,
+    t_final=1.0,
+    max_freq=1,
+    rms=1,
+    tau=0.1,
+    dt=0.001):
+
+    with nengo.Network(seed=network_seed) as network:
+        if signal == 'sinusoids':
+            stim = nengo.Node(lambda t: 
+                np.cos(2 * np.pi * freq * (t-1)))
+        elif signal == 'white_noise':
+            stim = nengo.Node(nengo.processes.WhiteSignal(
+                period=t_final, high=max_freq, rms=rms, seed=seeds))
+        extra_node = nengo.Node(size_in=1)
+        nengo.Connection(stim, extra_node, synapse=(tau*(1.0 - ~z) / dt) + 1)
+        extra_probe = nengo.Probe(extra_node, synapse=tau)
+    with nengo.Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
+        sim.run(t_final)
+    extra_signal = sim.data[extra_probe]
+    extra_mag = max(abs(np.min(extra_signal)), abs(np.max(extra_signal)))
+    extra_trans = 1.0 / extra_mag
+    return extra_trans
 
 def prime_sinusoids(t, dim, t_final, f_0=1):
     # todo: generate primes

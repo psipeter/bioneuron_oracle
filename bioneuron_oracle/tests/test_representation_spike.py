@@ -5,12 +5,12 @@ from bioneuron_oracle import BahlNeuron, TrainedSolver, spike_train
 
 def test_representation(Simulator, plt):
 	pre_neurons = 100
-	bio_neurons = 10
+	bio_neurons = 100
 	tau = 0.1
 	tau_readout = 0.1
 	dt = 0.001
-	min_rate = 150
-	max_rate = 200
+	min_rate = 60
+	max_rate = 80
 	radius = 1
 	bio_radius = 1
 	n_syn = 1
@@ -24,16 +24,25 @@ def test_representation(Simulator, plt):
 	inter_seed = 7
 
 	max_freq = 5
-	rms = 1.0
-	freq_train = 1
-	freq_test = 2
+	rms = 0.25
+	n_steps = 2
+
+	t_transient = 1.0
+
+	signal_train = 'sinusoids'
+	freq_train = 1.0
 	seed_train = 1
-	seed_test = 2
+	transform_train = 1.0
+	t_train = 1.0
+
+	signal_test = 'custom'
+	freq_test = 1.0
+	seed_test = 1
+	transform_test = 1.0
+	t_test = 1.0
 
 	dim = 1
 	reg = 0.1
-	transform = 1
-	t_final = 1.0
 	cutoff = 0.1
 
 	evo_params = {
@@ -42,9 +51,9 @@ def test_representation(Simulator, plt):
 		'sim_seed': sim_seed,
 		'n_processes': 10,
 		'popsize': 10,
-		'generations' : 10,
-		'w_0': 1e-1,
-		'delta_w' :1e-1,
+		'generations' : 20,
+		'w_0': 1e-2,
+		'delta_w' :1e-2,
 		'evo_seed' :9,
 		'evo_t_final' :1.0,
 	}
@@ -73,6 +82,17 @@ def test_representation(Simulator, plt):
 			elif signal == 'white_noise':
 				stim = nengo.Node(nengo.processes.WhiteSignal(
 					period=t_final, high=max_freq, rms=rms, seed=seeds))
+			elif signal == 'step':
+				stim = nengo.Node(lambda t:
+					np.linspace(-1, freq, n_steps)[int((t % t_final)/(t_final/n_steps))])
+			elif signal == 'constant':
+				stim = nengo.Node(lambda t: freq)
+			elif signal == 'custom':
+				stim = nengo.Node(lambda t:
+					0.0 * (t < t_transient)
+					# + -1.0 * (1 < t < 2)
+					# + 1.0 * (2 < t < 3))
+					+ np.cos(2 * np.pi * freq * (t-t_transient)) * (t > t_transient))
 
 			pre = nengo.Ensemble(
 				n_neurons=pre_neurons,
@@ -132,7 +152,7 @@ def test_representation(Simulator, plt):
 		Perform spike-match training on the pre-bio weights
 		"""
 		if train:
-			network = spike_train(network, evo_params, plots=True)
+			network = spike_train(network, evo_params, plots=False)
 			w_pre_bio_new = pre_bio.solver.weights_bio
 		else:
 			w_pre_bio_new = w_pre_bio
@@ -144,7 +164,7 @@ def test_representation(Simulator, plt):
 			- applying the oracle method (simulate, collect spikes and target, solver)
 		"""
 		with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
-			sim.run(t_final)
+			sim.run(t_transient+t_final)
 		lpf = nengo.Lowpass(tau_readout)
 		act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
 		act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
@@ -157,23 +177,49 @@ def test_representation(Simulator, plt):
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
 		"""
-		xhat_bio_static = np.dot(act_bio, d_readout_static)
-		xhat_lif_static = np.dot(act_lif, d_readout_static)
-		xhat_bio_oracle = np.dot(act_bio, d_readout_oracle_bio)
-		xhat_lif_oracle = np.dot(act_lif, d_readout_oracle_lif)	
-		rmse_bio_static = rmse(sim.data[probe_oracle][:,0], xhat_bio_static[:,0])
-		rmse_lif_static = rmse(sim.data[probe_oracle][:,0], xhat_lif_static[:,0])
-		rmse_bio_oracle = rmse(sim.data[probe_oracle][:,0], xhat_bio_oracle[:,0])
-		rmse_lif_oracle = rmse(sim.data[probe_oracle][:,0], xhat_lif_oracle[:,0])
-		if plot:
-			plt.plot(sim.trange(), xhat_bio_static[:,0], label='bio, static, rmse=%.5f' % rmse_bio_static)
-			plt.plot(sim.trange(), xhat_lif_static[:,0], label='lif, static, rmse=%.5f' % rmse_lif_static)
-			plt.plot(sim.trange(), xhat_bio_oracle[:,0], label='bio, oracle, rmse=%.5f' % rmse_bio_oracle)
-			plt.plot(sim.trange(), xhat_lif_oracle[:,0], label='lif, oracle, rmse=%.5f' % rmse_lif_oracle)
-			plt.plot(sim.trange(), sim.data[probe_oracle][:,0], label='oracle')
+		# xhat_bio_static = np.dot(act_bio, d_readout_static)
+		# xhat_lif_static = np.dot(act_lif, d_readout_static)
+		# xhat_bio_oracle = np.dot(act_bio, d_readout_oracle_bio)
+		# xhat_lif_oracle = np.dot(act_lif, d_readout_oracle_lif)	
+		# rmse_bio_static = rmse(sim.data[probe_oracle][:,0], xhat_bio_static[:,0])
+		# rmse_lif_static = rmse(sim.data[probe_oracle][:,0], xhat_lif_static[:,0])
+		# rmse_bio_oracle = rmse(sim.data[probe_oracle][:,0], xhat_bio_oracle[:,0])
+		# rmse_lif_oracle = rmse(sim.data[probe_oracle][:,0], xhat_lif_oracle[:,0])
+		# if plot == 'signals':
+		# 	plt.plot(sim.trange(), xhat_bio_static[:,0], label='bio, static, rmse=%.5f' % rmse_bio_static)
+		# 	plt.plot(sim.trange(), xhat_lif_static[:,0], label='lif, static, rmse=%.5f' % rmse_lif_static)
+		# 	plt.plot(sim.trange(), xhat_bio_oracle[:,0], label='bio, oracle, rmse=%.5f' % rmse_bio_oracle)
+		# 	plt.plot(sim.trange(), xhat_lif_oracle[:,0], label='lif, oracle, rmse=%.5f' % rmse_lif_oracle)
+		# 	plt.plot(sim.trange(), sim.data[probe_oracle][:,0], label='oracle')
+		# 	plt.xlabel('time (s)')
+		# 	plt.ylabel('$\hat{x}(t)$')
+		# 	plt.legend()
+		xhat_bio_static = np.dot(act_bio, d_readout_static)[int(t_transient/dt):,0]
+		xhat_lif_static = np.dot(act_lif, d_readout_static)[int(t_transient/dt):,0]
+		xhat_bio_oracle = np.dot(act_bio, d_readout_oracle_bio)[int(t_transient/dt):,0]
+		xhat_lif_oracle = np.dot(act_lif, d_readout_oracle_lif)[int(t_transient/dt):,0]
+		rmse_bio_static = rmse(sim.data[probe_oracle][int(t_transient/dt):,0], xhat_bio_static)
+		rmse_lif_static = rmse(sim.data[probe_oracle][int(t_transient/dt):,0], xhat_lif_static)
+		rmse_bio_oracle = rmse(sim.data[probe_oracle][int(t_transient/dt):,0], xhat_bio_oracle)
+		rmse_lif_oracle = rmse(sim.data[probe_oracle][int(t_transient/dt):,0], xhat_lif_oracle)
+		if plot == 'signals':
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_bio_static, label='bio, static, rmse=%.5f' % rmse_bio_static)
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_lif_static, label='lif, static, rmse=%.5f' % rmse_lif_static)
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_bio_oracle, label='bio, oracle, rmse=%.5f' % rmse_bio_oracle)
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_lif_oracle, label='lif, oracle, rmse=%.5f' % rmse_lif_oracle)
+			plt.plot(sim.trange()[int(t_transient/dt):], sim.data[probe_oracle][int(t_transient/dt):,0], label='oracle')
 			plt.xlabel('time (s)')
 			plt.ylabel('$\hat{x}(t)$')
 			plt.legend()
+		elif plot == 'rates':
+			# plt.plot(sim.trange(), 100*np.arange(pre_neurons)[None,:]+act_pre, label='pre')
+			plt.plot(sim.trange(), act_bio[:,:10], label='bio')
+			# plt.plot(sim.trange(), act_lif[:,:10], label='lif', linestyle='--')
+			# plt.plot(sim.trange(), 100*np.arange(bio_neurons)[None,:]+act_bio[:,:10], label='bio')
+			# plt.plot(sim.trange(), 100*np.arange(bio_neurons)[None,:]+act_lif[:,:10], label='lif', linestyle='--')
+			plt.xlabel('time (s)')
+			plt.ylabel('firing rates (Hz)')
+			plt.legend()		
 
 		return w_pre_bio_new, d_readout_static_new, d_readout_oracle_bio_new, d_readout_oracle_lif_new
 
@@ -197,11 +243,11 @@ def test_representation(Simulator, plt):
 		d_readout_oracle_bio=d_readout_init,
 		d_readout_oracle_lif=d_readout_init,
 		evo_params=evo_params,
-		signal='sinusoids',
+		signal=signal_train,
 		freq=freq_train,
 		seeds=seed_train,
-		transform=transform,
-		t_final=t_final,
+		transform=transform_train,
+		t_final=t_train,
 		train=to_train,
 		plot=False)
 	w_pre_bio_extra, d_readout_static_extra, d_readout_oracle_bio_extra, d_readout_oracle_lif_extra = sim(
@@ -210,12 +256,12 @@ def test_representation(Simulator, plt):
 		d_readout_oracle_bio=d_readout_oracle_bio_new,
 		d_readout_oracle_lif=d_readout_oracle_lif_new,
 		evo_params=evo_params,
-		signal='sinusoids',
+		signal=signal_test,
 		freq=freq_test,
 		seeds=seed_test,
-		transform=transform,
-		t_final=t_final,
+		transform=transform_test,
+		t_final=t_test,
 		train=False,
-		plot=True)
+		plot='signals')
 
 	np.savez(weight_dir+weight_filename, weights_bio=w_pre_bio_new)

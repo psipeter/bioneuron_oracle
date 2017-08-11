@@ -38,7 +38,7 @@ def test_integrator_1d(Simulator, plt):
 	reg = 0.1
 	t_final = 1.0
 	cutoff = 0.1
-	transform = tau
+	transform = 10*tau
 
 	evo_params = {
 		'dt': dt,
@@ -204,8 +204,8 @@ def test_integrator_1d(Simulator, plt):
 	Run the test
 	"""
 	weight_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/weights/'
-	weight_filename = 'w_integrator_1d_pre_bio.npz'
-	weight2_filename = 'w_integrator_1d_bio_bio.npz'
+	weight_filename = 'w_integrator_1d_pre_bio_10x_transform.npz'
+	weight2_filename = 'w_integrator_1d_bio_bio_10x_transform.npz'
 	try:
 		w_pre_bio_init = np.load(weight_dir+weight_filename)['weights_bio']
 		w_bio_bio_init = np.load(weight_dir+weight2_filename)['weights_bio']

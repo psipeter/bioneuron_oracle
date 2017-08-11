@@ -1,7 +1,8 @@
 import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
-from bioneuron_oracle import BahlNeuron, OracleSolver
+from bioneuron_oracle import BahlNeuron, OracleSolver, get_stim_deriv
+from nengolib.signal import s, z
 
 def test_bio_to_bio_1d(Simulator, plt):
 	# Nengo Parameters
@@ -30,20 +31,28 @@ def test_bio_to_bio_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 1.0
+
+	signal_train = 'white_noise'
 	freq_train = 1
-	freq_test = 1
 	seed_train = 1
+	transform_train = 3.0
+	t_train = 1.0
+
+	signal_test = 'white_noise'
+	freq_test = 1
 	seed_test = 1
+	transform_test = 3.0
+	t_test = 1.0
 
 	dim = 1
 	reg = 0.1
 	t_final = 1.0
 	cutoff = 0.1
-	transform = -0.5
 
 
 	def sim(
 		d_bio_bio2,
+		d_bio_bio2_deriv,
 		d_readout_bio,
 		d_readout_bio2,
 		d_readout_lif,
@@ -55,6 +64,10 @@ def test_bio_to_bio_1d(Simulator, plt):
 		seeds=1,
 		transform=1,
 		plot=False):
+
+
+		deriv_trans = get_stim_deriv(
+			signal, network_seed, sim_seed, freq, seeds, t_final, max_freq, rms, tau, dt)
 
 		"""
 		Define the network
@@ -76,9 +89,16 @@ def test_bio_to_bio_1d(Simulator, plt):
 				neuron_type=nengo.LIF(),
 				radius=radius,
 				label='pre')
+			pre_deriv = nengo.Ensemble(
+				n_neurons=pre_neurons,
+				dimensions=dim,
+				seed=pre_seed,
+				neuron_type=nengo.LIF(),
+				radius=radius,
+				label='pre_deriv')
 			bio = nengo.Ensemble(
 				n_neurons=bio_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio_seed,
 				neuron_type=BahlNeuron(),
 				# neuron_type=nengo.LIF(),
@@ -87,7 +107,7 @@ def test_bio_to_bio_1d(Simulator, plt):
 				label='bio')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
-				dimensions=bio.dimensions,
+				dimensions=dim,
 				seed=bio.seed,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				# radius=bio.radius,
@@ -95,7 +115,7 @@ def test_bio_to_bio_1d(Simulator, plt):
 				label='lif')
 			bio2 = nengo.Ensemble(
 				n_neurons=bio2_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio2_seed,
 				neuron_type=BahlNeuron(),
 				# neuron_type=nengo.LIF(),
@@ -104,42 +124,61 @@ def test_bio_to_bio_1d(Simulator, plt):
 				label='bio2')
 			lif2 = nengo.Ensemble(
 				n_neurons=bio2.n_neurons,
-				dimensions=bio2.dimensions,
+				dimensions=dim,
 				seed=bio2.seed,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				# radius=bio.radius,
 				neuron_type=nengo.LIF(),
 				label='lif2')
 			oracle = nengo.Node(size_in=dim, label='oracle')
+			oracle_deriv = nengo.Node(size_in=dim, label='oracle_deriv')
 			oracle2 = nengo.Node(size_in=dim, label='oracle2')
 			temp = nengo.Node(size_in=dim, label='temp')
 			temp2 = nengo.Node(size_in=dim, label='temp2')
 
 			bio_bio2_solver = OracleSolver(decoders_bio = d_bio_bio2)
+			bio_bio2_deriv_solver = OracleSolver(decoders_bio = d_bio_bio2_deriv)
 
 			nengo.Connection(stim, pre, synapse=None)
-			pre_bio = nengo.Connection(pre, bio,
+			nengo.Connection(stim, pre_deriv, synapse=(1.0 - ~z) / dt)
+			pre_bio = nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
-				transform=1,
+				transform=transform,
+				n_syn=n_syn)
+			nengo.Connection(pre_deriv, bio[1],
+				weights_bias_conn=False,
+				seed=2*conn_seed,
+				synapse=tau,
+				transform=deriv_trans*transform,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
 				synapse=tau,
 				transform=1)
-			bio_bio2 = nengo.Connection(bio, bio2,
+			bio_bio2 = nengo.Connection(bio[0], bio2[0],  # 1d or 2d?
 				weights_bias_conn=True,
 				seed=conn2_seed,
 				synapse=tau,
 				transform=transform,
 				solver = bio_bio2_solver,
 				n_syn=n_syn)
+			# bio_bio2_deriv = nengo.Connection(bio[1], bio2[1],  # 1d or 2d?
+			# 	weights_bias_conn=False,
+			# 	seed=2*conn2_seed,
+			# 	synapse=tau,
+			# 	transform=transform,
+			# 	solver = bio_bio2_deriv_solver,
+			# 	n_syn=n_syn)
 			nengo.Connection(lif, lif2,
 				synapse=tau,
 				transform=transform)
 			nengo.Connection(stim, oracle,
 				synapse=tau,
-				transform=1)
+				transform=transform)
+			nengo.Connection(oracle, oracle_deriv,
+				synapse=(1.0 - ~z) / dt,
+				transform=transform)
 			nengo.Connection(oracle, oracle2,
 				synapse=tau,
 				transform=transform)
@@ -156,6 +195,7 @@ def test_bio_to_bio_1d(Simulator, plt):
 			probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
 			probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 			probe_oracle = nengo.Probe(oracle, synapse=tau_readout)
+			probe_oracle_deriv = nengo.Probe(oracle_deriv, synapse=tau)  # synapse?
 			probe_lif2 = nengo.Probe(lif2, synapse=tau_readout, solver=nengo.solvers.LstsqL2(reg=reg))
 			probe_bio2_spikes = nengo.Probe(bio2.neurons, 'spikes')
 			probe_lif2_spikes = nengo.Probe(lif2.neurons, 'spikes')
@@ -183,6 +223,7 @@ def test_bio_to_bio_1d(Simulator, plt):
 			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle])[0]
 			d_readout_lif2_new = nengo.solvers.LstsqL2(reg=reg)(act_lif2, sim.data[probe_oracle2])[0]
 		d_bio_bio2_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle])[0]
+		d_bio_bio2_deriv_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle_deriv])[0]
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
@@ -209,52 +250,60 @@ def test_bio_to_bio_1d(Simulator, plt):
 			plt.ylabel('$\hat{x}(t)$')
 			plt.legend()
 
-		return d_bio_bio2_new, d_readout_bio_new, d_readout_lif_new, d_readout_bio2_new, d_readout_lif2_new, rmse_bio, rmse_bio2
+		return d_bio_bio2_new, d_bio_bio2_new, d_readout_bio_new, d_readout_lif_new, \
+				d_readout_bio2_new, d_readout_lif2_new, rmse_bio, rmse_bio2
 
 
 	"""
 	Run the test
 	"""
 	d_bio_bio2_init = np.zeros((bio_neurons, dim))
+	d_bio_bio2_deriv_init = np.zeros((bio_neurons, dim))
 	d_readout_bio_init = np.zeros((bio_neurons, dim))
 	d_readout_bio2_init = np.zeros((bio_neurons, dim))
 	d_readout_lif_init = np.zeros((bio_neurons, dim))
 	d_readout_lif2_init = np.zeros((bio_neurons, dim))
 
-	d_bio_bio2_new, d_readout_bio_extra, d_readout_lif_extra, d_readout_bio2_extra, d_readout_lif2_extra, rmse_bio, rmse_bio2 = sim(
+	d_bio_bio2_new, d_bio_bio2_deriv_new, d_readout_bio_extra, d_readout_lif_extra, \
+			d_readout_bio2_extra, d_readout_lif2_extra, rmse_bio, rmse_bio2 = sim(
 		d_bio_bio2=d_bio_bio2_init,
+		d_bio_bio2_deriv=d_bio_bio2_deriv_init,
 		d_readout_bio=d_readout_bio_init,
 		d_readout_bio2=d_readout_bio2_init,
 		d_readout_lif=d_readout_lif_init,
 		d_readout_lif2=d_readout_lif2_init,
-		signal='sinusoids',
-		freq=freq_test,
-		seeds=seed_test,
-		transform=transform,
-		t_final=t_final,
+		signal=signal_train,
+		freq=freq_train,
+		seeds=seed_train,
+		transform=transform_train,
+		t_final=t_train,
 		plot=False)
-	d_bio_bio2_extra, d_readout_bio_new, d_readout_lif_new, d_readout_bio2_new, d_readout_lif2_new, rmse_bio, rmse_bio2 = sim(
+	d_bio_bio2_extra, d_bio_bio2_deriv_extra, d_readout_bio_new, d_readout_lif_new, \
+			d_readout_bio2_new, d_readout_lif2_new, rmse_bio, rmse_bio2 = sim(
 		d_bio_bio2=d_bio_bio2_new,
+		d_bio_bio2_deriv=d_bio_bio2_deriv_new,
 		d_readout_bio=d_readout_bio_extra,
 		d_readout_bio2=d_readout_bio2_extra,
 		d_readout_lif=d_readout_lif_extra,
 		d_readout_lif2=d_readout_lif2_extra,
-		signal='sinusoids',
+		signal=signal_train,
 		freq=freq_train,
 		seeds=seed_train,
-		transform=transform,
-		t_final=t_final,
+		transform=transform_train,
+		t_final=t_train,
 		plot=False)
-	d_bio_bio2_extra, d_readout_bio_extra, d_readout_lif_extra, d_readout_bio2_extra, d_readout_lif2_extra, rmse_bio, rmse_bio2 = sim(
+	d_bio_bio2_extra, d_bio_bio2_deriv_extra, d_readout_bio_extra, d_readout_lif_extra, \
+			d_readout_bio2_extra, d_readout_lif2_extra, rmse_bio, rmse_bio2 = sim(
 		d_bio_bio2=d_bio_bio2_new,
+		d_bio_bio2_deriv=d_bio_bio2_deriv_new,
 		d_readout_bio=d_readout_bio_new,
 		d_readout_bio2=d_readout_bio2_new,
 		d_readout_lif=d_readout_lif_new,
 		d_readout_lif2=d_readout_lif2_new,
-		signal='sinusoids',
-		freq=freq_train,
-		seeds=seed_train,
-		transform=transform,
-		t_final=t_final,
+		signal=signal_test,
+		freq=freq_test,
+		seeds=seed_test,
+		transform=transform_test,
+		t_final=t_test,
 		plot=True)
 	assert rmse_bio2 < cutoff

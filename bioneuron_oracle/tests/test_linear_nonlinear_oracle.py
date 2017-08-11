@@ -1,7 +1,8 @@
 import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
-from bioneuron_oracle import BahlNeuron
+from bioneuron_oracle import BahlNeuron, get_stim_deriv
+from nengolib.signal import s, z
 
 def test_linear_1d(Simulator, plt):
 	# Nengo Parameters
@@ -13,7 +14,7 @@ def test_linear_1d(Simulator, plt):
 	min_rate = 150
 	max_rate = 200
 	radius = 1
-	bio_radius = 1
+	bio_radius = np.sqrt(2)
 	n_syn = 1
 
 	pre_seed = 1
@@ -25,17 +26,26 @@ def test_linear_1d(Simulator, plt):
 	inter_seed = 7
 
 	max_freq = 5
-	rms = 1.0
-	freq_train = 1
-	freq_test = 2
+	rms = 0.25
+
+	signal_train = 'white_noise'
+	freq_train = 10.0
 	seed_train = 1
-	seed_test = 2
+	transform_train = 5.0
+	t_train = 1
+
+	signal_test = 'white_noise'
+	freq_test = 10.0
+	seed_test = 1
+	transform_test = 5.0
+	t_test = 1
 
 	dim = 1
-	reg = 0.1
+	reg = 0.01
 	t_final = 1.0
 	cutoff = 0.1
 	transform = -0.5
+
 
 	def sim(
 		d_readout_bio,
@@ -51,6 +61,10 @@ def test_linear_1d(Simulator, plt):
 		"""
 		Define the network
 		"""
+
+		deriv_trans = get_stim_deriv(
+			signal, 1, network_seed, sim_seed, freq, seeds, t_final, max_freq, rms, tau, dt)
+
 		with nengo.Network(seed=network_seed) as network:
 
 			if signal == 'sinusoids':
@@ -68,16 +82,23 @@ def test_linear_1d(Simulator, plt):
 				label='pre')
 			bio = nengo.Ensemble(
 				n_neurons=bio_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio_seed,
 				neuron_type=BahlNeuron(),
 				# neuron_type=nengo.LIF(),
 				radius=bio_radius,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				label='bio')
+			pre_deriv = nengo.Ensemble(
+				n_neurons=pre_neurons,
+				dimensions=dim,
+				seed=pre_seed,
+				neuron_type=nengo.LIF(),
+				radius=radius,
+				label='pre_deriv')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
-				dimensions=bio.dimensions,
+				dimensions=dim,
 				seed=bio.seed,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				# radius=bio.radius,
@@ -87,7 +108,8 @@ def test_linear_1d(Simulator, plt):
 			temp = nengo.Node(size_in=dim)
 
 			nengo.Connection(stim, pre, synapse=None)
-			pre_bio = nengo.Connection(pre, bio,
+			nengo.Connection(stim, pre_deriv, synapse=(1.0 - ~z) / dt)
+			pre_bio = nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
@@ -96,6 +118,12 @@ def test_linear_1d(Simulator, plt):
 			nengo.Connection(pre, lif,
 				synapse=tau,
 				transform=transform)
+			nengo.Connection(pre_deriv, bio[1],
+				weights_bias_conn=False,
+				seed=2*conn_seed,
+				synapse=tau,
+				transform=deriv_trans*transform,
+				n_syn=n_syn)
 			nengo.Connection(stim, oracle,
 				synapse=tau,
 				transform=transform)
@@ -156,20 +184,20 @@ def test_linear_1d(Simulator, plt):
 	d_readout_bio_new, d_readout_lif_new, rmse_bio = sim(
 		d_readout_bio=d_readout_bio_init,
 		d_readout_lif=d_readout_lif_init,
-		signal='sinusoids',
-		freq=freq_test,
-		seeds=seed_test,
-		transform=transform,
-		t_final=t_final,
+		signal=signal_train,
+		freq=freq_train,
+		seeds=seed_train,
+		transform=transform_train*transform,
+		t_final=t_train,
 		plot=False)
 	d_readout_bio_extra, d_readout_lif_extra, rmse_bio = sim(
 		d_readout_bio=d_readout_bio_new,
 		d_readout_lif=d_readout_lif_new,
-		signal='sinusoids',
-		freq=freq_train,
-		seeds=seed_train,
-		transform=transform,
-		t_final=t_final,
+		signal=signal_test,
+		freq=freq_test,
+		seeds=seed_test,
+		transform=transform_test*transform,
+		t_final=t_test,
 		plot=True)
 
 	assert rmse_bio < cutoff
@@ -191,7 +219,7 @@ def test_nonlinear_1d(Simulator, plt):
 	min_rate = 150
 	max_rate = 200
 	radius = 1
-	bio_radius = 1
+	bio_radius = np.sqrt(2)
 	n_syn = 1
 
 	pre_seed = 1
@@ -204,10 +232,17 @@ def test_nonlinear_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 1.0
-	freq_train = 1
-	freq_test = 1
+	signal_train = 'sinusoids'
+	freq_train = 1.0
 	seed_train = 1
+	transform_train = 1.0
+	t_train = 1
+
+	signal_test = 'sinusoids'
+	freq_test = 1.0
 	seed_test = 1
+	transform_test = 1.0
+	t_test = 1
 
 	dim = 1
 	reg = 0.1
@@ -225,6 +260,9 @@ def test_nonlinear_1d(Simulator, plt):
 		seeds=1,
 		order=1,
 		transform=1):
+
+		deriv_trans = get_stim_deriv(
+			signal, network_seed, sim_seed, freq, seeds, t_final, max_freq, rms, tau, dt)
 
 		"""
 		Define the network
@@ -247,9 +285,16 @@ def test_nonlinear_1d(Simulator, plt):
 				neuron_type=nengo.LIF(),
 				radius=radius,
 				label='pre')
+			pre_deriv = nengo.Ensemble(
+				n_neurons=pre_neurons,
+				dimensions=dim,
+				seed=pre_seed,
+				neuron_type=nengo.LIF(),
+				radius=radius,
+				label='pre_deriv')
 			bio = nengo.Ensemble(
 				n_neurons=bio_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio_seed,
 				neuron_type=BahlNeuron(),
 				# neuron_type=nengo.LIF(),
@@ -258,7 +303,7 @@ def test_nonlinear_1d(Simulator, plt):
 				label='bio')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
-				dimensions=bio.dimensions,
+				dimensions=dim,
 				seed=bio.seed,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				# radius=bio.radius,
@@ -268,11 +313,18 @@ def test_nonlinear_1d(Simulator, plt):
 			temp = nengo.Node(size_in=dim)
 
 			nengo.Connection(stim, pre, synapse=None)
-			pre_bio = nengo.Connection(pre, bio,
+			nengo.Connection(stim, pre_deriv, synapse=(1.0 - ~z) / dt)
+			pre_bio = nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
 				function=legendre,
+				n_syn=n_syn)
+			nengo.Connection(pre_deriv, bio[1],
+				weights_bias_conn=False,
+				seed=2*conn_seed,
+				synapse=tau,
+				transform=deriv_trans*transform,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
 				synapse=tau,
@@ -346,10 +398,10 @@ def test_nonlinear_1d(Simulator, plt):
 			rmse_lif] = sim(
 			d_readout_bio=d_readout_bio_init,
 			d_readout_lif=d_readout_lif_init,
-			signal='sinusoids',
-			freq=freq_test,
-			seeds=seed_test,
-			transform=transform,
+			signal=signal_train,
+			freq=freq_train,
+			seeds=seed_train,
+			transform=transform_train,
 			order=order,
 			t_final=t_final)
 		[d_readout_bio_extra,
@@ -362,9 +414,9 @@ def test_nonlinear_1d(Simulator, plt):
 			rmse_lif] = sim(
 			d_readout_bio=d_readout_bio_new,
 			d_readout_lif=d_readout_lif_new,
-			signal='sinusoids',
-			freq=freq_train,
-			seeds=seed_train,
+			signal=signal_test,
+			freq=freq_test,
+			seeds=seed_test,
 			transform=transform,
 			order=order,
 			t_final=t_final)

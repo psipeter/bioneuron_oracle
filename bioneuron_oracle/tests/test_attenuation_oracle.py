@@ -46,7 +46,7 @@ def test_tuning_curves(Simulator, plt):
     inter_seed = 7
 
     max_freq = 5
-    rms = 1.0
+    rms = 0.25
 
     dim = 1
     reg = 0.1
@@ -209,9 +209,9 @@ def test_tuning_curves(Simulator, plt):
     Run the test
     """
     sim(
-        signal='sinusoids',
+        signal='white_noise',
         freq=1,
         seeds=1,
-        transform=1,
+        transform=5,
         t_final=t_final,
         plot=True)
