@@ -8,7 +8,7 @@ from nengolib.signal import z, s
 def test_representation_1d(Simulator, plt):
 	# Nengo Parameters
 	pre_neurons = 100
-	bio_neurons = 200
+	bio_neurons = 100
 	tau = 0.1
 	tau_readout = 0.1
 	tau_decoders = 0.1
@@ -34,7 +34,7 @@ def test_representation_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 0.25
-	t_transient = 0.5
+	t_transient = 0.1
 
 	signal_train = 'white_noise'
 	freq_train = 10.0
@@ -64,8 +64,8 @@ def test_representation_1d(Simulator, plt):
 		lpf_signals = nengo.Lowpass(tau)
 		stim_trans = 1.0 / max(abs(stimulus))
 		deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt)))
-		stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
-		deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
+		# stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
+		# deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
 
 		"""
 		Define the network
@@ -125,28 +125,29 @@ def test_representation_1d(Simulator, plt):
 				transform=deriv_trans)
 			nengo.Connection(stim, oracle,
 				synapse=tau,
-				transform=stim_trans*stim_trans2)
+				transform=stim_trans)
+				# transform=stim_trans*stim_trans2)
 			nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
-				transform=stim_trans2,
+				# transform=stim_trans2,
 				n_syn=n_syn)
 			nengo.Connection(pre_deriv, bio[1],
 				weights_bias_conn=False,
 				seed=2*conn_seed,
 				synapse=tau,
-				transform=deriv_trans2,
+				# transform=deriv_trans2,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
-				synapse=tau,
-				transform=stim_trans2)
+				synapse=tau)
+				# transform=stim_trans2)
 			nengo.Connection(pre, alif[0],
-				synapse=tau,
-				transform=stim_trans2)
+				synapse=tau)
+				# transform=stim_trans2)
 			nengo.Connection(pre_deriv, alif[1],
-				synapse=tau,
-				transform=deriv_trans2)
+				synapse=tau)
+				# transform=deriv_trans2)
 			# temp connections to grab decoders
 			conn_lif = nengo.Connection(lif, temp,
 				synapse=None,
@@ -211,8 +212,8 @@ def test_representation_1d(Simulator, plt):
 		rmse_alif = rmse(x_target, xhat_alif)
 
 		if plot == 'signals':
-			# plt.plot(sim.trange()[int(t_transient/dt):], sim.data[probe_pre][int(t_transient/dt):], label='pre')
-			# plt.plot(sim.trange()[int(t_transient/dt):], sim.data[probe_pre_deriv][int(t_transient/dt):], label='pre_deriv')
+			plt.plot(sim.trange(), sim.data[probe_pre], label='pre')
+			plt.plot(sim.trange(), sim.data[probe_pre_deriv], label='pre_deriv')
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_alif, label='adaptive lif, rmse=%.5f' % rmse_alif)
@@ -237,7 +238,6 @@ def test_representation_1d(Simulator, plt):
 	d_readout_bio_init = np.zeros((bio_neurons, dim))
 	d_readout_lif_init = np.zeros((bio_neurons, dim))
 	d_readout_alif_init = np.zeros((bio_neurons, dim))
-	# d_JL_alif_init = np.random.RandomState(seed=conn_seed).randn(bio_neurons, 1) * jl_mag_alif
 
 	d_readout_bio_new, d_readout_lif_new, d_readout_alif_new, rmse_bio = sim(
 		d_readout_bio=d_readout_bio_init,

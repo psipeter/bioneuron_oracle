@@ -1,13 +1,13 @@
 import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
-from bioneuron_oracle import BahlNeuron, get_stim_deriv
+from bioneuron_oracle import BahlNeuron, get_signal
 from nengolib.signal import s, z
 
 def test_linear_1d(Simulator, plt):
 	# Nengo Parameters
 	pre_neurons = 100
-	bio_neurons = 100
+	bio_neurons = 500
 	tau = 0.1
 	tau_readout = 0.1
 	dt = 0.001
@@ -27,17 +27,16 @@ def test_linear_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 0.25
+	t_transient = 0.1
 
 	signal_train = 'white_noise'
-	freq_train = 10.0
-	seed_train = 1
-	transform_train = 5.0
-	t_train = 1
+	freq_train = 2.0
+	seed_train = 3
+	t_train = 10
 
 	signal_test = 'white_noise'
-	freq_test = 10.0
+	freq_test = 1.0
 	seed_test = 1
-	transform_test = 5.0
 	t_test = 1
 
 	dim = 1
@@ -51,28 +50,28 @@ def test_linear_1d(Simulator, plt):
 		d_readout_bio,
 		d_readout_lif,
 		readout_LIF = 'LIF',
-		signal='sinusoids',
+		signal_type='sinusoids',
 		t_final=1.0,
 		freq=1,
 		seeds=1,
-		transform=1,
 		plot=False):
 
 		"""
 		Define the network
 		"""
 
-		deriv_trans = get_stim_deriv(
-			signal, 1, network_seed, sim_seed, freq, seeds, t_final, max_freq, rms, tau, dt)
+		stimulus, derivative = get_signal(
+			signal_type, network_seed, sim_seed, freq, seeds, t_transient, t_final, max_freq, rms, tau, dt)
+		lpf_signals = nengo.Lowpass(tau)
+		stim_trans = 1.0 / max(abs(stimulus)) * transform
+		deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt))) * transform
+		# stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt))) * transform  # for test
+		# deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
 
 		with nengo.Network(seed=network_seed) as network:
 
-			if signal == 'sinusoids':
-				stim = nengo.Node(lambda t: np.cos(2 * np.pi * freq * t))
-			elif signal == 'white_noise':
-				stim = nengo.Node(nengo.processes.WhiteSignal(
-					period=t_final, high=max_freq, rms=rms, seed=seeds))
-
+			stim = nengo.Node(lambda t: stimulus[int(t/dt)])
+			deriv = nengo.Node(lambda t: derivative[int(t/dt)])
 			pre = nengo.Ensemble(
 				n_neurons=pre_neurons,
 				dimensions=dim,
@@ -107,26 +106,27 @@ def test_linear_1d(Simulator, plt):
 			oracle = nengo.Node(size_in=dim)
 			temp = nengo.Node(size_in=dim)
 
-			nengo.Connection(stim, pre, synapse=None)
-			nengo.Connection(stim, pre_deriv, synapse=(1.0 - ~z) / dt)
+			nengo.Connection(stim, pre,
+				synapse=None,
+				transform=stim_trans)
+			nengo.Connection(deriv, pre_deriv,
+				synapse=None,
+				transform=deriv_trans)
+			nengo.Connection(stim, oracle,
+				synapse=tau,
+				transform=stim_trans)
 			pre_bio = nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
-				transform=transform,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
-				synapse=tau,
-				transform=transform)
+				synapse=tau)
 			nengo.Connection(pre_deriv, bio[1],
 				weights_bias_conn=False,
 				seed=2*conn_seed,
 				synapse=tau,
-				transform=deriv_trans*transform,
 				n_syn=n_syn)
-			nengo.Connection(stim, oracle,
-				synapse=tau,
-				transform=transform)
 			conn_lif = nengo.Connection(lif, temp,
 				synapse=tau,
 				solver=nengo.solvers.LstsqL2(reg=reg))
@@ -143,31 +143,31 @@ def test_linear_1d(Simulator, plt):
 		and apply the oracle method to calculate readout decoders
 		"""
 		with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
-			sim.run(t_final)
+			sim.run(t_transient+t_final)
 		lpf = nengo.Lowpass(tau_readout)
-		act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
-		act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
+		act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)[int(t_transient/dt):]
+		act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)[int(t_transient/dt):]
 		# bio readout is always "oracle" for the oracle method training
-		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle])[0]
+		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
 		if readout_LIF == 'LIF':
 			d_readout_lif_new = sim.data[conn_lif].weights.T
 		elif readout_LIF == 'oracle':
-			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle])[0]
+			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle][int(t_transient/dt):])[0]
 
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
 		"""
-		x_target = sim.data[probe_oracle][:,0]
+		x_target = sim.data[probe_oracle][:,0][int(t_transient/dt):]
 		xhat_bio = np.dot(act_bio, d_readout_bio)[:,0]
 		xhat_lif = np.dot(act_lif, d_readout_lif)[:,0]
 		rmse_bio = rmse(x_target, xhat_bio)
 		rmse_lif = rmse(x_target, xhat_lif)
 
 		if plot:
-			plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
-			plt.plot(sim.trange(), xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
-			plt.plot(sim.trange(), x_target, label='oracle')
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+			plt.plot(sim.trange()[int(t_transient/dt):], xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
+			plt.plot(sim.trange()[int(t_transient/dt):], x_target, label='oracle')
 			plt.xlabel('time (s)')
 			plt.ylabel('$\hat{x}(t)$')
 			plt.legend()
@@ -184,19 +184,17 @@ def test_linear_1d(Simulator, plt):
 	d_readout_bio_new, d_readout_lif_new, rmse_bio = sim(
 		d_readout_bio=d_readout_bio_init,
 		d_readout_lif=d_readout_lif_init,
-		signal=signal_train,
+		signal_type=signal_train,
 		freq=freq_train,
 		seeds=seed_train,
-		transform=transform_train*transform,
 		t_final=t_train,
 		plot=False)
 	d_readout_bio_extra, d_readout_lif_extra, rmse_bio = sim(
 		d_readout_bio=d_readout_bio_new,
 		d_readout_lif=d_readout_lif_new,
-		signal=signal_test,
+		signal_type=signal_test,
 		freq=freq_test,
 		seeds=seed_test,
-		transform=transform_test*transform,
 		t_final=t_test,
 		plot=True)
 
@@ -231,38 +229,39 @@ def test_nonlinear_1d(Simulator, plt):
 	inter_seed = 7
 
 	max_freq = 5
-	rms = 1.0
-	signal_train = 'sinusoids'
-	freq_train = 1.0
-	seed_train = 1
-	transform_train = 1.0
-	t_train = 1
+	rms = 0.25
+	signal_train = 'white_noise'
+	freq_train = 2.0
+	seed_train = 3
+	t_train = 10.0
 
-	signal_test = 'sinusoids'
+	signal_test = 'white_noise'
 	freq_test = 1.0
 	seed_test = 1
-	transform_test = 1.0
-	t_test = 1
+	t_test = 1.0
 
 	dim = 1
-	reg = 0.1
-	transform = 1
-	t_final = 1.0
+	reg = 0.01
 	cutoff = 0.1
+	t_transient = 0.0
 
 	def sim(
 		d_readout_bio,
 		d_readout_lif,
 		readout_LIF = 'LIF',
-		signal='sinusoids',
+		signal_type='sinusoids',
 		t_final=1.0,
 		freq=1,
 		seeds=1,
-		order=1,
-		transform=1):
+		order=1):
 
-		deriv_trans = get_stim_deriv(
-			signal, network_seed, sim_seed, freq, seeds, t_final, max_freq, rms, tau, dt)
+		stimulus, derivative = get_signal(
+			signal_type, network_seed, sim_seed, freq, seeds, t_transient, t_final, max_freq, rms, tau, dt)
+		lpf_signals = nengo.Lowpass(tau)
+		stim_trans = 1.0 / max(abs(stimulus))
+		deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt)))
+		# stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
+		# deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
 
 		"""
 		Define the network
@@ -272,12 +271,8 @@ def test_nonlinear_1d(Simulator, plt):
 			def legendre(x):
 				return sp.legendre(order)(x)
 
-			if signal == 'sinusoids':
-				stim = nengo.Node(lambda t: np.cos(2 * np.pi * freq * t))
-			elif signal == 'white_noise':
-				stim = nengo.Node(nengo.processes.WhiteSignal(
-					period=t_final, high=max_freq, rms=rms, seed=seeds))
-
+			stim = nengo.Node(lambda t: stimulus[int(t/dt)])
+			deriv = nengo.Node(lambda t: derivative[int(t/dt)])
 			pre = nengo.Ensemble(
 				n_neurons=pre_neurons,
 				dimensions=dim,
@@ -312,8 +307,16 @@ def test_nonlinear_1d(Simulator, plt):
 			oracle = nengo.Node(size_in=dim)
 			temp = nengo.Node(size_in=dim)
 
-			nengo.Connection(stim, pre, synapse=None)
-			nengo.Connection(stim, pre_deriv, synapse=(1.0 - ~z) / dt)
+			nengo.Connection(stim, pre,
+				synapse=None,
+				transform=stim_trans)
+			nengo.Connection(deriv, pre_deriv,
+				synapse=None,
+				transform=deriv_trans)
+			nengo.Connection(stim, oracle,
+				synapse=tau,
+				transform=stim_trans,
+				function=legendre)
 			pre_bio = nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
@@ -324,12 +327,8 @@ def test_nonlinear_1d(Simulator, plt):
 				weights_bias_conn=False,
 				seed=2*conn_seed,
 				synapse=tau,
-				transform=deriv_trans*transform,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
-				synapse=tau,
-				function=legendre)
-			nengo.Connection(stim, oracle,
 				synapse=tau,
 				function=legendre)
 			conn_lif = nengo.Connection(lif, temp,
@@ -347,21 +346,21 @@ def test_nonlinear_1d(Simulator, plt):
 		and apply the oracle method to calculate readout decoders
 		"""
 		with Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
-			sim.run(t_final)
+			sim.run(t_transient+t_final)
 		lpf = nengo.Lowpass(tau_readout)
-		act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
-		act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
+		act_bio = lpf.filt(sim.data[probe_bio_spikes][int(t_transient/dt):], dt=dt)
+		act_lif = lpf.filt(sim.data[probe_lif_spikes][int(t_transient/dt):], dt=dt)
 		# bio readout is always "oracle" for the oracle method training
-		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle])[0]
+		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
 		if readout_LIF == 'LIF':
 			d_readout_lif_new = sim.data[conn_lif].weights.T
 		elif readout_LIF == 'oracle':
-			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle])[0]
+			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle][int(t_transient/dt):])[0]
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
 		"""
-		x_target = sim.data[probe_oracle][:,0]
+		x_target = sim.data[probe_oracle][int(t_transient/dt):,0]
 		xhat_bio = np.dot(act_bio, d_readout_bio)
 		xhat_lif = np.dot(act_lif, d_readout_lif)
 		rmse_bio = rmse(x_target, xhat_bio)
@@ -369,7 +368,7 @@ def test_nonlinear_1d(Simulator, plt):
 
 		return [d_readout_bio_new,
 			d_readout_lif_new,
-			sim.trange(),
+			sim.trange()[int(t_transient/dt):],
 			x_target,
 			xhat_bio,
 			xhat_lif,
@@ -398,12 +397,11 @@ def test_nonlinear_1d(Simulator, plt):
 			rmse_lif] = sim(
 			d_readout_bio=d_readout_bio_init,
 			d_readout_lif=d_readout_lif_init,
-			signal=signal_train,
+			signal_type=signal_train,
 			freq=freq_train,
 			seeds=seed_train,
-			transform=transform_train,
 			order=order,
-			t_final=t_final)
+			t_final=t_train)
 		[d_readout_bio_extra,
 			d_readout_lif_extra,
 			times,
@@ -414,17 +412,16 @@ def test_nonlinear_1d(Simulator, plt):
 			rmse_lif] = sim(
 			d_readout_bio=d_readout_bio_new,
 			d_readout_lif=d_readout_lif_new,
-			signal=signal_test,
+			signal_type=signal_test,
 			freq=freq_test,
 			seeds=seed_test,
-			transform=transform,
 			order=order,
-			t_final=t_final)
+			t_final=t_test)
 
 		# assert rmse_bio_static < cutoff
 		df = pd.DataFrame(columns=columns, index=range(3*len(times)))
 		j=0
-		times=np.arange(dt, t_final, dt)
+		times=np.arange(dt, t_test, dt)
 		for t, time in enumerate(times):
 			print [time, xhat_bio[t][0], 'bio', order]
 			df.loc[j] = [time, xhat_bio[t][0], 'bio', order]

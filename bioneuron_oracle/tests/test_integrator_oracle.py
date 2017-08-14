@@ -284,12 +284,12 @@ def test_integrator_deriv_1d(Simulator, plt):
 
 	max_freq = 5
 	rms = 0.25
-	t_transient = 0.5
+	t_transient = 0.0
 
 	signal_train = 'white_noise'
 	freq_train = 1
-	seed_train = 1
-	t_train = 1.0
+	seed_train = 3
+	t_train = 10.0
 
 	signal_test = 'white_noise'
 	freq_test = 1
@@ -328,8 +328,8 @@ def test_integrator_deriv_1d(Simulator, plt):
 		lpf_signals = nengo.Lowpass(tau)
 		stim_trans = 1.0 / max(abs(stimulus))
 		deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt)))
-		stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
-		deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
+		# stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
+		# deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
 
 		"""
 		Define the network
@@ -391,22 +391,21 @@ def test_integrator_deriv_1d(Simulator, plt):
 				transform=deriv_trans)
 			nengo.Connection(stim, oracle,
 				synapse=1/s,
-				transform=stim_trans*stim_trans2)
+				transform=stim_trans)
 			''' Connect stimuli (spikes) feedforward to non-JL_dims of bio '''
 			nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
-				transform=stim_trans2*tau)
+				transform=tau)
 			nengo.Connection(pre_deriv, bio[1],
 				weights_bias_conn=False,
 				seed=2*conn_seed,
 				synapse=tau,
-				transform=deriv_trans2,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
 				synapse=tau,
-				transform=stim_trans2*tau)
+				transform=tau)
 			''' Connect recurrent (spikes) feedback to all dims of bio '''
 			nengo.Connection(bio[0], bio[0],  # full recurrence?
 				seed=conn2_seed,
@@ -453,12 +452,12 @@ def test_integrator_deriv_1d(Simulator, plt):
 		if readout_LIF == 'LIF':
 			d_readout_lif_new = sim.data[conn_lif].weights.T
 		elif readout_LIF == 'oracle':
-			# d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle][int(t_transient/dt):])[0]
-			d_readout_lif_new = nengo.solvers.Lstsq()(act_lif_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
-		# d_recurrent_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
-		d_recurrent_bio_new = nengo.solvers.Lstsq()(act_bio_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
-		# d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
-		d_readout_bio_new = nengo.solvers.Lstsq()(act_bio_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
+			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle][int(t_transient/dt):])[0]
+			# d_readout_lif_new = nengo.solvers.Lstsq()(act_lif_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
+		d_recurrent_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
+		# d_recurrent_bio_new = nengo.solvers.Lstsq()(act_bio_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
+		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
+		# d_readout_bio_new = nengo.solvers.Lstsq()(act_bio_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
