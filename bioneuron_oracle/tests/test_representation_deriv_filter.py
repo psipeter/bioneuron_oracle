@@ -57,9 +57,9 @@ def test_representation_1d(Simulator, plt):
 	filter_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/filters/'
 	filter_filename = '100gen.npz' # representation_num_1_den_2_100gen_100neurons_3s_small_delta
 
-	signal_train, _ = get_stim_deriv(
+	signal_train, deriv_train = get_stim_deriv(
 		signal_type, network_seed, sim_seed, freq, seed_train, t_transient, t_train, max_freq, rms, tau, dt)
-	signal_test, _ = get_stim_deriv(
+	signal_test, deriv_test = get_stim_deriv(
 		signal_type, network_seed, sim_seed, freq, seed_test, t_transient, t_test, max_freq, rms, tau, dt)
 
 	def make_network():
@@ -75,9 +75,16 @@ def test_representation_1d(Simulator, plt):
 				neuron_type=nengo.LIF(),
 				radius=radius,
 				label='pre')
+			pre_deriv = nengo.Ensemble(
+				n_neurons=pre_neurons,
+				dimensions=dim,
+				seed=pre_seed,
+				neuron_type=nengo.LIF(),
+				radius=radius,
+				label='pre_deriv')
 			bio = nengo.Ensemble(
 				n_neurons=bio_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio_seed,
 				neuron_type=BahlNeuron(),
 				radius=bio_radius,
@@ -93,7 +100,7 @@ def test_representation_1d(Simulator, plt):
 				label='lif')
 			alif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
-				dimensions=dim,
+				dimensions=dim+1,
 				seed=bio.seed,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				radius=bio.radius,
@@ -104,13 +111,19 @@ def test_representation_1d(Simulator, plt):
 
 			nengo.Connection(stim, pre, synapse=None)
 			nengo.Connection(stim, oracle, synapse=tau)
-			nengo.Connection(pre, bio,
+			nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
 				n_syn=n_syn)
+			nengo.Connection(pre_deriv, bio[1],
+				weights_bias_conn=False,
+				seed=2*conn_seed,
+				synapse=tau,
+				n_syn=n_syn)
 			nengo.Connection(pre, lif, synapse=tau)
-			nengo.Connection(pre, alif, synapse=tau)
+			nengo.Connection(pre, alif[0], synapse=tau)
+			nengo.Connection(pre, alif[0], synapse=tau)
 			network.conn_lif = nengo.Connection(lif, temp, synapse=None)
 
 			probe_stim = nengo.Probe(stim, synapse=None)

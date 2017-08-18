@@ -1,8 +1,9 @@
 import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
-from bioneuron_oracle import BahlNeuron, OracleSolver, get_signal
+from bioneuron_oracle import BahlNeuron, OracleSolver, get_stim_deriv
 from nengolib.signal import z, s
+from nengolib.synapses import Highpass
 
 
 def test_representation_1d(Simulator, plt):
@@ -11,7 +12,7 @@ def test_representation_1d(Simulator, plt):
 	bio_neurons = 100
 	tau = 0.1
 	tau_readout = 0.1
-	tau_decoders = 0.1
+	tau_combo = 0.1
 	tau_JL = 0.1
 	dt = 0.001
 	min_rate = 150
@@ -33,18 +34,18 @@ def test_representation_1d(Simulator, plt):
 	to_plot = 'signals'
 
 	max_freq = 5
-	rms = 0.25
-	t_transient = 0.1
+	rms = 0.5
+	t_transient = 0.5
 
 	signal_train = 'white_noise'
 	freq_train = 10.0
-	seed_train = 3
+	seed_train = 2
 	t_train = 10.0
 
 	signal_test = 'white_noise'
 	freq_test = 10.0
-	seed_test = 1
-	t_test = 1.0
+	seed_test = 2
+	t_test = 3.0
 
 
 	def sim(
@@ -52,18 +53,17 @@ def test_representation_1d(Simulator, plt):
 		d_readout_lif,
 		d_readout_alif,
 		t_final=1.0,
-		tau_decoders=0.1,
 		readout_LIF='LIF',
 		signal_type='sinusoids',
 		freq=1,
-		seeds=1,
+		signal_seed=1,
 		plot=False):
 
-		stimulus, derivative = get_signal(
-			signal_type, network_seed, sim_seed, freq, seeds, t_transient, t_final, max_freq, rms, tau, dt)
-		lpf_signals = nengo.Lowpass(tau)
-		stim_trans = 1.0 / max(abs(stimulus))
-		deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt)))
+		stimulus, derivative = get_stim_deriv(
+			signal_type, network_seed, sim_seed, freq, signal_seed, t_transient, t_final, max_freq, rms, tau, dt)
+		# lpf_signals = nengo.Lowpass(tau)
+		# stim_trans = 1.0 / max(abs(stimulus))
+		# deriv_trans = 1.0 / max(abs(lpf_signals.filt(derivative, dt=dt)))
 		# stim_trans2 = 1.0 / max(abs(lpf_signals.filt(stim_trans*stimulus, dt=dt)))
 		# deriv_trans2 = 1.0 / max(abs(lpf_signals.filt(deriv_trans*derivative, dt=dt)))
 
@@ -118,36 +118,27 @@ def test_representation_1d(Simulator, plt):
 
 			# feedforward connections
 			nengo.Connection(stim, pre,
-				synapse=None,
-				transform=stim_trans)
+				synapse=None)
 			nengo.Connection(deriv, pre_deriv,
-				synapse=None,
-				transform=deriv_trans)
+				synapse=None)
 			nengo.Connection(stim, oracle,
-				synapse=tau,
-				transform=stim_trans)
-				# transform=stim_trans*stim_trans2)
+				synapse=tau)
 			nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
 				seed=conn_seed,
 				synapse=tau,
-				# transform=stim_trans2,
 				n_syn=n_syn)
 			nengo.Connection(pre_deriv, bio[1],
 				weights_bias_conn=False,
 				seed=2*conn_seed,
 				synapse=tau,
-				# transform=deriv_trans2,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
 				synapse=tau)
-				# transform=stim_trans2)
 			nengo.Connection(pre, alif[0],
 				synapse=tau)
-				# transform=stim_trans2)
 			nengo.Connection(pre_deriv, alif[1],
 				synapse=tau)
-				# transform=deriv_trans2)
 			# temp connections to grab decoders
 			conn_lif = nengo.Connection(lif, temp,
 				synapse=None,
@@ -167,8 +158,7 @@ def test_representation_1d(Simulator, plt):
 			probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 			probe_alif_spikes = nengo.Probe(alif.neurons, 'spikes')
 			probe_oracle = nengo.Probe(oracle, synapse=tau_readout)
-			probe_oracle_decoders = nengo.Probe(oracle, synapse=tau_decoders)
-
+			probe_oracle_combo = nengo.Probe(oracle, synapse=nengo.Lowpass(tau_combo) * Highpass(tau_combo))
 
 		"""
 		Simulate the network, collect bioneuron activities and target values,
@@ -180,47 +170,53 @@ def test_representation_1d(Simulator, plt):
 		# sim.data[probe_stim][:] = sim.data[probe_stim][int(t_transient/dt):]  # read-only
 
 		lpf = nengo.Lowpass(tau_readout)
-		lpf_decoders = nengo.Lowpass(tau_decoders)
+		combo_filt = nengo.Lowpass(tau_combo) * Highpass(tau_combo)
 		act_bio = lpf.filt(sim.data[probe_bio_spikes][int(t_transient/dt):], dt=dt)
 		act_lif = lpf.filt(sim.data[probe_lif_spikes][int(t_transient/dt):], dt=dt)
 		act_alif = lpf.filt(sim.data[probe_alif_spikes][int(t_transient/dt):], dt=dt)
-		act_bio_decoders = lpf_decoders.filt(sim.data[probe_bio_spikes][int(t_transient/dt):], dt=dt)
-		act_lif_decoders = lpf_decoders.filt(sim.data[probe_lif_spikes][int(t_transient/dt):], dt=dt)
-		act_alif_decoders = lpf_decoders.filt(sim.data[probe_alif_spikes][int(t_transient/dt):], dt=dt)
+		act_bio_combo = combo_filt.filt(sim.data[probe_bio_spikes][int(t_transient/dt):], dt=dt)
+		act_lif_combo = combo_filt.filt(sim.data[probe_lif_spikes][int(t_transient/dt):], dt=dt)
+		act_alif_combo = combo_filt.filt(sim.data[probe_alif_spikes][int(t_transient/dt):], dt=dt)
 		# bio readout is always "oracle" for the oracle method training
-		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio_decoders, sim.data[probe_oracle][int(t_transient/dt):])[0]
-		# d_readout_bio_new = nengo.solvers.Lstsq()(act_bio_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
+		d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, sim.data[probe_oracle][int(t_transient/dt):])[0]
+		# d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio_combo, sim.data[probe_oracle][int(t_transient/dt):])[0]
+		# d_readout_bio_new = nengo.solvers.LstsqL2(reg=reg)(act_bio_combo, sim.data[probe_oracle_combo][int(t_transient/dt):])[0]
 		if readout_LIF == 'LIF':
 			d_readout_lif_new = sim.data[conn_lif].weights.T
 			d_readout_alif_new = sim.data[conn_alif].weights.T
 		elif readout_LIF == 'oracle':
-			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif_decoders, sim.data[probe_oracle][int(t_transient/dt):])[0]
-			d_readout_alif_new = nengo.solvers.LstsqL2(reg=reg)(act_alif_decoders, sim.data[probe_oracle][int(t_transient/dt):])[0]
-			# d_readout_lif_new = nengo.solvers.Lstsq()(act_lif_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
-			# d_readout_alif_new = nengo.solvers.Lstsq()(act_alif_decoders, sim.data[probe_oracle_decoders][int(t_transient/dt):])[0]
-
+			d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif, sim.data[probe_oracle][int(t_transient/dt):])[0]
+			d_readout_alif_new = nengo.solvers.LstsqL2(reg=reg)(act_alif, sim.data[probe_oracle][int(t_transient/dt):])[0]
+			# d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif_combo, sim.data[probe_oracle][int(t_transient/dt):])[0]
+			# d_readout_alif_new = nengo.solvers.LstsqL2(reg=reg)(act_alif_combo, sim.data[probe_oracle][int(t_transient/dt):])[0]
+			# d_readout_lif_new = nengo.solvers.LstsqL2(reg=reg)(act_lif_combo, sim.data[probe_oracle_combo][int(t_transient/dt):])[0]
+			# d_readout_alif_new = nengo.solvers.LstsqL2(reg=reg)(act_alif_combo, sim.data[probe_oracle_combo][int(t_transient/dt):])[0]
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
 		"""
 		x_target = sim.data[probe_oracle][int(t_transient/dt):]
+		# x_target = sim.data[probe_oracle_combo][int(t_transient/dt):]
 		xhat_bio = np.dot(act_bio, d_readout_bio)
 		xhat_lif = np.dot(act_lif, d_readout_lif)
 		xhat_alif = np.dot(act_alif, d_readout_alif)
+		# xhat_bio = np.dot(act_bio_combo, d_readout_bio)
+		# xhat_lif = np.dot(act_lif_combo, d_readout_lif)
+		# xhat_alif = np.dot(act_alif_combo, d_readout_alif)
 		rmse_bio = rmse(x_target, xhat_bio)
 		rmse_lif = rmse(x_target, xhat_lif)
 		rmse_alif = rmse(x_target, xhat_alif)
 
 		if plot == 'signals':
-			plt.plot(sim.trange(), sim.data[probe_pre], label='pre')
-			plt.plot(sim.trange(), sim.data[probe_pre_deriv], label='pre_deriv')
+			# plt.plot(sim.trange(), sim.data[probe_pre], label='pre')
+			# plt.plot(sim.trange(), sim.data[probe_pre_deriv], label='pre_deriv')
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
 			plt.plot(sim.trange()[int(t_transient/dt):], xhat_alif, label='adaptive lif, rmse=%.5f' % rmse_alif)
 			plt.plot(sim.trange()[int(t_transient/dt):], x_target, label='oracle')
 			plt.xlabel('time (s)')
 			plt.ylabel('$\hat{x}(t)$')
-			# plt.xlim((0.15, t_transient+t_final))
+			plt.xlim((t_transient, t_transient+t_final))
 			plt.legend()
 		elif plot == 'rates':
 			# plt.plot(sim.trange(), 100*np.arange(pre_neurons)[None,:]+act_pre, label='pre')
@@ -243,10 +239,9 @@ def test_representation_1d(Simulator, plt):
 		d_readout_bio=d_readout_bio_init,
 		d_readout_lif=d_readout_lif_init,
 		d_readout_alif=d_readout_alif_init,
-		tau_decoders=tau_decoders,
 		signal_type=signal_train,
 		freq=freq_train,
-		seeds=seed_train,
+		signal_seed=seed_train,
 		t_final=t_train,
 		readout_LIF='oracle',
 		plot=False)
@@ -254,10 +249,9 @@ def test_representation_1d(Simulator, plt):
 		d_readout_bio=d_readout_bio_new,
 		d_readout_lif=d_readout_lif_new,
 		d_readout_alif=d_readout_alif_new,
-		tau_decoders=tau_decoders,
 		signal_type=signal_test,
 		freq=freq_test,
-		seeds=seed_test,
+		signal_seed=seed_test,
 		t_final=t_test,
 		readout_LIF='oracle',
 		plot=to_plot)

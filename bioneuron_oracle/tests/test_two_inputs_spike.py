@@ -55,7 +55,9 @@ def test_two_inputs_1d(Simulator, plt):
 	def sim(
 		w_pre_bio,
 		w_pre2_bio,
+		w_pre_combined_bio,
 		d_readout,
+		d_readout_combined,
 		evo_params,
 		readout = 'LIF',
 		signal='sinusoids',
@@ -94,6 +96,13 @@ def test_two_inputs_1d(Simulator, plt):
 				neuron_type=nengo.LIF(),
 				radius=radius,
 				label='pre2')
+			pre_combined = nengo.Ensemble(
+				n_neurons=pre_neurons,
+				dimensions=dim,
+				seed=pre2_seed,
+				neuron_type=nengo.LIF(),
+				radius=2*radius,
+				label='pre_combined')
 			bio = nengo.Ensemble(
 				n_neurons=bio_neurons,
 				dimensions=dim,
@@ -103,6 +112,15 @@ def test_two_inputs_1d(Simulator, plt):
 				radius=bio_radius,
 				max_rates=nengo.dists.Uniform(min_rate, max_rate),
 				label='bio')
+			bio_combined = nengo.Ensemble(
+				n_neurons=bio_neurons,
+				dimensions=dim,
+				seed=bio_seed,
+				neuron_type=BahlNeuron(),
+				# neuron_type=nengo.LIF(),
+				radius=bio_radius,
+				max_rates=nengo.dists.Uniform(min_rate, max_rate),
+				label='bio_combined')
 			lif = nengo.Ensemble(
 				n_neurons=bio.n_neurons,
 				dimensions=bio.dimensions,
@@ -116,9 +134,12 @@ def test_two_inputs_1d(Simulator, plt):
 
 			pre_bio_solver = TrainedSolver(weights_bio = w_pre_bio)
 			pre2_bio_solver = TrainedSolver(weights_bio = w_pre2_bio)
+			pre_combined_bio_solver = TrainedSolver(weights_bio = w_pre_combined_bio)
 
 			nengo.Connection(stim, pre, synapse=None)
 			nengo.Connection(stim2, pre2, synapse=None)
+			nengo.Connection(stim, pre_combined, synapse=None)
+			nengo.Connection(stim2, pre_combined, synapse=None)
 			pre_bio = nengo.Connection(pre, bio,
 				seed=conn_seed,
 				synapse=tau,
@@ -132,6 +153,13 @@ def test_two_inputs_1d(Simulator, plt):
 				transform=transform,
 				trained_weights=True,
 				solver = pre2_bio_solver,
+				n_syn=n_syn)
+			pre_combined_bio = nengo.Connection(pre_combined, bio_combined,
+				seed=conn_seed,
+				synapse=tau,
+				transform=transform,
+				trained_weights=True,
+				solver = pre_combined_bio_solver,
 				n_syn=n_syn)
 			nengo.Connection(pre, lif,
 				synapse=tau,
@@ -152,6 +180,7 @@ def test_two_inputs_1d(Simulator, plt):
 			probe_stim = nengo.Probe(stim, synapse=None)
 			probe_lif = nengo.Probe(lif, synapse=tau_readout, solver=nengo.solvers.LstsqL2(reg=reg))
 			probe_bio_spikes = nengo.Probe(bio.neurons, 'spikes')
+			probe_bio_combined_spikes = nengo.Probe(bio_combined.neurons, 'spikes')
 			probe_lif_spikes = nengo.Probe(lif.neurons, 'spikes')
 			probe_oracle = nengo.Probe(oracle, synapse=tau_readout)
 
@@ -163,9 +192,11 @@ def test_two_inputs_1d(Simulator, plt):
 			network = spike_train(network, evo_params, plots=False)
 			w_pre_bio_new = pre_bio.solver.weights_bio
 			w_pre2_bio_new = pre2_bio.solver.weights_bio
+			w_pre_combined_bio_new = pre_combined_bio.solver.weights_bio
 		else:
 			w_pre_bio_new = w_pre_bio
 			w_pre2_bio_new = w_pre2_bio
+			w_pre_combined_bio_new = w_pre_combined_bio
 
 		"""
 		Run the simulation with the new w_pre_bio
@@ -174,6 +205,7 @@ def test_two_inputs_1d(Simulator, plt):
 			sim.run(t_final)
 		lpf = nengo.Lowpass(tau_readout)
 		act_bio = lpf.filt(sim.data[probe_bio_spikes], dt=dt)
+		act_bio_combined = lpf.filt(sim.data[probe_bio_combined_spikes], dt=dt)
 		act_lif = lpf.filt(sim.data[probe_lif_spikes], dt=dt)
 		x_target = sim.data[probe_oracle]
 
@@ -184,27 +216,32 @@ def test_two_inputs_1d(Simulator, plt):
 		"""
 		if readout == 'LIF':
 			d_readout_new = sim.data[conn_lif].weights.T
+			d_readout_combined_new = sim.data[conn_lif].weights.T
 		elif readout == 'oracle':
 			d_readout_new = nengo.solvers.LstsqL2(reg=reg)(act_bio, x_target)[0]
+			d_readout_combined_new = nengo.solvers.LstsqL2(reg=reg)(act_bio_combined, x_target)[0]
 		x_target = x_target[:,0]
 
 		"""
 		Use the old readout decoders to estimate the bioneurons' outputs for plotting
 		"""
 		xhat_bio = np.dot(act_bio, d_readout)[:,0]
+		xhat_bio_combined = np.dot(act_bio_combined, d_readout_combined)[:,0]
 		xhat_lif = np.dot(act_lif, d_readout)[:,0]
 		rmse_bio = rmse(x_target, xhat_bio)
+		rmse_bio_combined = rmse(x_target, xhat_bio_combined)
 		rmse_lif = rmse(x_target, xhat_lif)
 
 		if plot:
-			plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.3f' % rmse_bio)
-			plt.plot(sim.trange(), xhat_lif, label='lif, rmse=%.3f' % rmse_lif)
+			plt.plot(sim.trange(), xhat_bio, label='bio, rmse=%.5f' % rmse_bio)
+			plt.plot(sim.trange(), xhat_bio_combined, label='bio_combined, rmse=%.5f' % rmse_bio_combined)
+			plt.plot(sim.trange(), xhat_lif, label='lif, rmse=%.5f' % rmse_lif)
 			plt.plot(sim.trange(), x_target, label='oracle')
 			plt.xlabel('time (s)')
 			plt.ylabel('$\hat{x}(t)$')
 			plt.legend()
 
-		return w_pre_bio_new, w_pre2_bio_new, d_readout_new, rmse_bio
+		return w_pre_bio_new, w_pre2_bio_new, w_pre_combined_bio_new, d_readout_new, d_readout_combined_new, rmse_bio
 
 
 	"""
@@ -213,20 +250,26 @@ def test_two_inputs_1d(Simulator, plt):
 	weight_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/weights/'
 	weight_filename = 'w_two_inputs_1d_pre_to_bio.npz'
 	weight2_filename = 'w_two_inputs_1d_pre2_to_bio.npz'
+	weight_combined_filename = 'w_two_inputs_1d_pre_combined_to_bio.npz'
 	try:
 		w_pre_bio_init = np.load(weight_dir+weight_filename)['weights_bio']
 		w_pre2_bio_init = np.load(weight_dir+weight2_filename)['weights_bio']
+		w_pre_combined_bio_init = np.load(weight_dir+weight_combined_filename)['weights_bio']
 		to_train = False
 	except IOError:
 		w_pre_bio_init = np.zeros((bio_neurons, pre_neurons, n_syn))
 		w_pre2_bio_init = np.zeros((bio_neurons, pre_neurons, n_syn))
+		w_pre_combined_bio_init = np.zeros((bio_neurons, pre_neurons, n_syn))
 		to_train = True
 	d_readout_init = np.zeros((bio_neurons, dim))
+	d_readout_combined_init = np.zeros((bio_neurons, dim))
 
-	w_pre_bio_new, w_pre2_bio_new, d_readout_new, rmse_bio = sim(
+	w_pre_bio_new, w_pre2_bio_new, w_pre_combined_bio_new, d_readout_new, d_readout_combined_new, rmse_bio = sim(
 		w_pre_bio=w_pre_bio_init,
 		w_pre2_bio=w_pre2_bio_init,
+		w_pre_combined_bio=w_pre_combined_bio_init,
 		d_readout=d_readout_init,
+		d_readout_combined=d_readout_combined_init,
 		evo_params=evo_params,
 		readout='LIF',
 		signal='sinusoids',
@@ -236,10 +279,12 @@ def test_two_inputs_1d(Simulator, plt):
 		t_final=t_final,
 		train=to_train,
 		plot=False)
-	w_pre_bio_extra, w_pre2_bio_extra, d_readout_extra, rmse_bio = sim(
+	w_pre_bio_extra, w_pre2_bio_extra, w_pre_combined_bio_extra, d_readout_extra, d_readout_combined_extra, rmse_bio = sim(
 		w_pre_bio=w_pre_bio_new,
 		w_pre2_bio=w_pre2_bio_new,
+		w_pre_combined_bio=w_pre_combined_bio_new,
 		d_readout=d_readout_new,
+		d_readout_combined=d_readout_combined_new,
 		evo_params=evo_params,
 		readout='LIF',
 		signal='sinusoids',
@@ -252,5 +297,6 @@ def test_two_inputs_1d(Simulator, plt):
 
 	np.savez(weight_dir+weight_filename, weights_bio=w_pre_bio_new)
 	np.savez(weight_dir+weight2_filename, weights_bio=w_pre2_bio_new)
+	np.savez(weight_dir+weight_combined_filename, weights_bio=w_pre_combined_bio_new)
 
 	assert rmse_bio < cutoff
