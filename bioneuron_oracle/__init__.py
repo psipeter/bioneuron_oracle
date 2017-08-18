@@ -14,6 +14,7 @@ from .monkeypatch import *
 from .signals import *
 from .solver import *
 from .spike_match_train import *
+from .filters_decoders_train import *
 from .spike_train import *
 
 patch()  # nengo.Connection <-> BioConnection, Simulator cleanup
