@@ -19,6 +19,8 @@ def train_filters_decoders(
 	network,
 	Simulator,
 	sim_seed,
+	signals,
+	derivatives,
 	t_transient,
 	t_final,
 	dt,
@@ -37,17 +39,22 @@ def train_filters_decoders(
 	def evaluate(inputs):
 		network=inputs[0]
 		Simulator=inputs[1]
-		zeros = inputs[2][0]
-		poles = inputs[2][1]
-		bio_probe = inputs[3][0]
-		target_probe = inputs[3][1]
+		stimului=inputs[2][0]
+		derivatives=inputs[2][1]
+		zeros = inputs[3][0]
+		poles = inputs[3][1]
+		bio_probe = inputs[4][0]
+		target_probe = inputs[4][1]
 		"""
 		ensure stim outputs the training signal and the bio/alif are assigned
-		their particular readout filters, as well as other filters that have been
-		trained already (these can't be fed into pool.evaluate() without _paramdict errors)
+		their particular readout filters
 		"""
 		filt = build_filter(zeros, poles)
 		with network:
+			for pair in stimului:  # pair = [stim (node), signal (array, time-indexed)]
+				pair[0].output = lambda t: pair[1][int(t/dt)]
+			for pair in derivatives:  # pair = [stim (node), signal (array, time-indexed)]
+				pair[0].output = lambda t: pair[1][int(t/dt)]
 			bio_probe.synapse = filt
 		"""
 		run the simulation, collect filtered activites,
@@ -68,17 +75,24 @@ def train_filters_decoders(
 	def get_decoders(inputs, plot=False):
 		network=inputs[0]
 		Simulator=inputs[1]
-		zeros = inputs[2]
-		poles = inputs[3]
-		bio_probe = inputs[4]
-		target_probe = inputs[5]
+		stimului=inputs[2][0]
+		derivatives=inputs[2][1]
+		zeros = inputs[3][0]
+		poles = inputs[3][1]
+		bio_probe = inputs[4][0]
+		target_probe = inputs[4][1]
 		"""
 		ensure stim outputs the training signal and the bio/alif are assigned
 		their particular readout filters
 		"""
 		filt = build_filter(zeros, poles)
 		with network:
+			for pair in stimului:  # pair = [stim (node), signal (array, time-indexed)]
+				pair[0].output = lambda t: pair[1][int(t/dt)]
+			for pair in derivatives:  # pair = [stim (node), signal (array, time-indexed)]
+				pair[0].output = lambda t: pair[1][int(t/dt)]
 			bio_probe.synapse = filt
+
 		"""
 		run the simulation, collect filtered activites,
 		and apply the oracle method to calculate readout decoders
@@ -102,12 +116,12 @@ def train_filters_decoders(
 			ax1.set(xlabel='time (s)', ylabel='activity', title='zeros: %s \npoles: %s'
 				%(zeros, poles))
 			ax1.legend()
-			figure.savefig('plots/filters/decodes_%s.png' %id(bio_probe))
+			figure.savefig('plots/deriv_filters/decodes_%s.png' %id(bio_probe))
 			figure, ax1 = plt.subplots(1,1)
 			ax1.plot(sim.trange()[int(t_transient/dt):], act_bio, label='bio')
 			ax1.set(xlabel='time (s)', ylabel='activity', title=str(filt))
 			ax1.legend()
-			figure.savefig('plots/filters/activities_%s.png' %id(bio_probe))
+			figure.savefig('plots/deriv_filters/activities_%s.png' %id(bio_probe))
 
 		return d_bio
 
@@ -127,35 +141,10 @@ def train_filters_decoders(
 
 
 	""" Run evolutionary strategy """
+	probes = [bio_probe, target_probe]
 	fit_vs_gen = []
 	for g in range(evo_gen):
-		probes = [bio_probe, target_probe]
-		# reconfigure nengolib synapses to have propper attributes to be passed to pool.map()
-		for probe in network.probes:
-			if isinstance(probe.synapse, LinearSystem):
-				try:
-					probe.synapse._paramdict = nengo.Lowpass(0.1)._paramdict
-					probe.synapse.tau = 0.1
-					probe.synapse.default_size_in = 1
-					probe.synapse.default_size_out = 1
-				except:
-					continue
-		for conn in network.connections:
-			if isinstance(conn.synapse, LinearSystem):
-				try:
-					conn.synapse._paramdict = nengo.Lowpass(0.1)._paramdict
-					conn.synapse.tau = 0.1
-					conn.synapse.default_size_in = 1
-					conn.synapse.default_size_out = 1
-				except:
-					continue
-		# for probe in probes:
-		# 	if isinstance(probe.synapse, LinearSystem):
-		# 		probe.synapse._paramdict = nengo.Lowpass(0.1)._paramdict
-		# 		probe.synapse.tau = 0.1
-		# 		probe.synapse.default_size_in = 1
-		# 		probe.synapse.default_size_out = 1
-		inputs = [[network, Simulator, filter_pop[p], probes] for p in range(evo_popsize)]
+		inputs = [[network, Simulator, [signals, derivatives], filter_pop[p], probes] for p in range(evo_popsize)]
 		# fitnesses = np.array([evaluate(inputs[0]), evaluate(inputs[1]), evaluate(inputs[2])])  # debugging
 		fitnesses = np.array(pool.map(evaluate, inputs))
 		best_filter = filter_pop[np.argmin(fitnesses)]
@@ -178,14 +167,16 @@ def train_filters_decoders(
 	""" Grab the best filters and decoders and plot fitness vs generation """
 	best_zeros = best_filter[0]
 	best_poles = best_filter[1]
-	best_d_bio = get_decoders([network, Simulator, best_zeros, best_poles, bio_probe, target_probe], plot=True)
+	decoders = np.array([get_decoders(inp) for inp in inputs])
+	d_bio = decoders[np.argmin(fitnesses)]
 
+	get_decoders([network, Simulator, [signals, derivatives], filter_pop[np.argmin(fitnesses)], probes], plot=True)  # plot training error
 	fit_vs_gen = np.array(fit_vs_gen)
 	import matplotlib.pyplot as plt
 	figure, ax1 = plt.subplots(1,1)
 	ax1.plot(np.arange(0, evo_gen), fit_vs_gen)
 	ax1.set(xlabel='Generation', ylabel='Fitness ($\hat{x}$ RMSE)')
 	ax1.legend()
-	figure.savefig('plots/filters/fitness_vs_generation_%s.png' % id(bio_probe))
+	figure.savefig('plots/deriv_filters/fitness_vs_generation_%s.png' % id(bio_probe))
 
-	return best_zeros, best_poles, best_d_bio
+	return best_zeros, best_poles, d_bio

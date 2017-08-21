@@ -2,7 +2,44 @@ import numpy as np
 import nengo
 from nengolib.signal import s, z
 
-__all__ = ['prime_sinusoids', 'step_input', 'equalpower', 'get_stim_deriv']
+__all__ = ['prime_sinusoids', 'step_input', 'equalpower', 'get_stim_deriv', 'get_stim_integ']
+
+def get_stim_integ(
+    signal_type,
+    network_seed=1,
+    sim_seed=1,
+    freq=1,
+    signal_seed=1,
+    t_transient=1.0,
+    t_final=1.0,
+    max_freq=1,
+    rms=1,
+    tau=0.1,
+    dt=0.001):
+
+    with nengo.Network(seed=network_seed) as network:
+        if signal_type == 'sinusoids':
+            stim = nengo.Node(lambda t: 
+                np.cos(2 * np.pi * freq * (t-t_transient)))
+        elif signal_type == 'white_noise':
+            stim = nengo.Node(nengo.processes.WhiteSignal(
+                period=t_final, high=max_freq, rms=rms, seed=signal_seed, y0=0))
+        integ = nengo.Node(size_in=1)
+        nengo.Connection(stim, integ, synapse=1/s)
+        p_stim = nengo.Probe(stim, synapse=None)
+        p_integ = nengo.Probe(integ, synapse=None)
+    with nengo.Simulator(network, dt=dt, progress_bar=False, seed=sim_seed) as sim:
+        sim.run(t_final)
+    transient = np.array(0.0 * np.arange(0, t_transient+dt, dt))
+    stimulus = np.hstack((transient, sim.data[p_stim][:,0]))
+    integral = np.hstack((transient, sim.data[p_integ][:,0]))
+    lpf_signals = nengo.Lowpass(tau)
+    stim_norm = 1.0 / max(abs(stimulus))
+    integ_norm = 1.0 / max(abs(lpf_signals.filt(integral, dt=dt)))
+    stimulus *= stim_norm
+    # integral *= integ_norm
+
+    return stimulus, integral
 
 def get_stim_deriv(
     signal_type,

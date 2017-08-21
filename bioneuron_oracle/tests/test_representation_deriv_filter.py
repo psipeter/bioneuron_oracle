@@ -1,7 +1,7 @@
 import numpy as np
 import nengo
 from nengo.utils.numpy import rmse
-from bioneuron_oracle import BahlNeuron, get_stim_deriv, train_filters_decoders, build_filter
+from bioneuron_oracle import BahlNeuron, get_stim_deriv, train_filters_decoders_alif, build_filter_alif
 
 
 def test_representation_1d(Simulator, plt):
@@ -34,8 +34,8 @@ def test_representation_1d(Simulator, plt):
 	max_freq = 5
 	rms = 0.5
 	t_transient = 0.5
-	t_train = 1.0
-	t_test = 1.0
+	t_train = 3.0
+	t_test = 3.0
 	signal_type = 'white_noise'
 	seed_train = 1
 	seed_test = 2
@@ -55,7 +55,7 @@ def test_representation_1d(Simulator, plt):
 	# delta_b_s = [1e-1]  # numerator mutation constants
 	# delta_a_s = [1e-1, 1e-2]  # denominator mutation constants
 	filter_dir = '/home/pduggins/bioneuron_oracle/bioneuron_oracle/tests/deriv_filters/'
-	filter_filename = 'test3.npz' # representation_num_1_den_2_100gen_100neurons_3s_small_delta
+	filter_filename = 'rep_no_deriv.npz' # representation_num_1_den_2_100gen_100neurons_3s_small_delta
 
 	signal_train, deriv_train = get_stim_deriv(
 		signal_type, network_seed, sim_seed, freq, seed_train, t_transient, t_train, max_freq, rms, tau, dt)
@@ -111,6 +111,7 @@ def test_representation_1d(Simulator, plt):
 			temp = nengo.Node(size_in=dim)
 
 			nengo.Connection(stim, pre, synapse=None)
+			nengo.Connection(deriv, pre_deriv, synapse=None)
 			nengo.Connection(stim, oracle, synapse=tau)
 			nengo.Connection(pre, bio[0],
 				weights_bias_conn=True,
@@ -124,7 +125,7 @@ def test_representation_1d(Simulator, plt):
 				n_syn=n_syn)
 			nengo.Connection(pre, lif, synapse=tau)
 			nengo.Connection(pre, alif[0], synapse=tau)
-			nengo.Connection(pre, alif[0], synapse=tau)
+			nengo.Connection(pre_deriv, alif[1], synapse=tau)
 			network.conn_lif = nengo.Connection(lif, temp, synapse=None)
 
 			probe_stim = nengo.Probe(stim, synapse=None)
@@ -163,8 +164,8 @@ def test_representation_1d(Simulator, plt):
 		poles_alif = filter_info['poles_alif']
 		gain_bio = filter_info['gain_bio']
 		gain_alif = filter_info['gain_alif']
-		f_bio = build_filter(zeros_bio, poles_bio, gain_bio)
-		f_alif = build_filter(zeros_alif, poles_alif, gain_alif)
+		f_bio = build_filter_alif(zeros_bio, poles_bio, gain_bio)
+		f_alif = build_filter_alif(zeros_alif, poles_alif, gain_alif)
 		# b_s_bio = filter_info['b_s_bio']
 		# b_s_alif = filter_info['b_s_alif']
 		# a_s_bio = filter_info['a_s_bio']
@@ -178,11 +179,12 @@ def test_representation_1d(Simulator, plt):
 		# assert False
 	except IOError:
 		# b_s_bio, b_s_alif, a_s_bio, a_s_alif, d_bio, d_alif = train_filters_decoders(
-		zeros_bio, zeros_alif, poles_bio, poles_alif, gain_bio, gain_alif, d_bio, d_alif = train_filters_decoders(
+		zeros_bio, zeros_alif, poles_bio, poles_alif, gain_bio, gain_alif, d_bio, d_alif = train_filters_decoders_alif(
 			network,
 			Simulator,
 			sim_seed,
-			signal_train,
+			[[network.stim, signal_train]],
+			[[network.deriv, deriv_train]],
 			t_transient,
 			t_train,
 			dt,
@@ -217,8 +219,8 @@ def test_representation_1d(Simulator, plt):
 			d_alif=d_alif)
 		# f_bio = build_filter(b_s_bio, a_s_bio)
 		# f_alif = build_filter(b_s_alif, a_s_alif)
-		f_bio = build_filter(zeros_bio, poles_bio, gain_bio)
-		f_alif = build_filter(zeros_alif, poles_alif, gain_alif)
+		f_bio = build_filter_alif(zeros_bio, poles_bio, gain_bio)
+		f_alif = build_filter_alif(zeros_alif, poles_alif, gain_alif)
 
 	with network:
 		network.stim.output = lambda t: signal_test[int(t/dt)]
